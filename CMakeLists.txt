@@ -9,7 +9,7 @@ set(APPLICATION_SRC
   )
 
 add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC})
-add_dependencies(${LIGHTER_PROJECT} ${LIGHTER_DEPENDENCIES})
+add_lighter_dependencies(${LIGHTER_PROJECT})
   
 #--------------------------------------------------------------------
 # Install files other than the application
