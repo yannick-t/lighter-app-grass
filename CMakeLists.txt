@@ -1,5 +1,4 @@
 project(${LIGHTER_PROJECT})
-cmake_minimum_required(VERSION 2.8)
 
 #--------------------------------------------------------------------
 # Create target
