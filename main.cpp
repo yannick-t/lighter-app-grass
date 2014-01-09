@@ -155,8 +155,8 @@ int main()
 		// Environment map
 		ogl::Texture envMap = nullptr;
 		{
-			auto image = img::load_image<float, 3>(stdx::load_binary_file("beach_probe.hdr"));
-			envMap = ogl::Texture::create2D(GL_TEXTURE_2D, GL_RGBA16F, image.dim.x, image.dim.y, 0, image.pixels.data(), GL_FLOAT, GL_RGB);
+//			auto image = img::load_image<float, 3>(stdx::load_binary_file("beach_probe.hdr"));
+//			envMap = ogl::Texture::create2D(GL_TEXTURE_2D, GL_RGBA16F, image.dim.x, image.dim.y, 0, image.pixels.data(), GL_FLOAT, GL_RGB);
 		}
 
 		// Text
