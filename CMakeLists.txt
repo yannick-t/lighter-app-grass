@@ -5,6 +5,12 @@ project(${LIGHTER_PROJECT})
 #--------------------------------------------------------------------
 set(APPLICATION_SRC
   main.cpp
+  obj.cpp
+  obj.h
+  pch.cpp
+  pch.h
+  renderer.glsl.h
+  background.glsl
   )
 
 add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC})
