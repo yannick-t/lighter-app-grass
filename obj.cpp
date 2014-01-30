@@ -15,6 +15,9 @@ Obj parse_object(char const* objText)
 
 	appx::Task task("obj");
 
+	bool normalsReordered = false;
+	std::vector<glm::pod_vec<unsigned, 3>> nf;
+
 	for (char const* objCursor = objText; *objCursor; )
 	{
 		// Trim
@@ -77,6 +80,7 @@ Obj parse_object(char const* objText)
 					
 					l = strtol(objCursor, &numEnd, 10);
 					if (l < 0) l += nv;
+					else --l;
 					vind.c[i] = (unsigned) l;
 					objCursor = numEnd;
 
@@ -91,14 +95,17 @@ Obj parse_object(char const* objText)
 							++objCursor;
 							l = strtol(objCursor, &numEnd, 10);
 							if (l < 0) l += nn;
+							else --l;
 							nind.c[i] = (unsigned) l;
 							objCursor = numEnd;
+
+							normalsReordered |= nind.c[i] != vind.c[i];
 						}
 					}
 				}
 
-				// ASSERT: vind == nind
 				obj.f.push_back(vind);
+				nf.push_back(nind);
 			}
 			break;
 
@@ -130,6 +137,16 @@ Obj parse_object(char const* objText)
 			task.progressPct((float) pct);
 			nextPercentMarker = objText + std::min((pct + 10) * percentDelta, fileSize);
 		}
+	}
+
+	if (normalsReordered)
+	{
+		auto unorderedN = std::move(obj.n);
+		obj.n.resize(obj.v.size());
+
+		for (size_t i = 0, ie = nf.size(); i < ie; ++i)
+			for (size_t j = 0; j < 3; ++j)
+				obj.n[obj.f[i].c[j]] = unorderedN[nf[i].c[j]];
 	}
 
 	return obj;
