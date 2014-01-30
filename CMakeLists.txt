@@ -3,8 +3,10 @@ project(${LIGHTER_PROJECT})
 #--------------------------------------------------------------------
 # Create target
 #--------------------------------------------------------------------
-set(APPLICATION_SHADER_SRC
+set(APPLICATION_SYSTEM_SRC
   renderer.glsl.h
+  )
+set(APPLICATION_SHADER_SRC
   background.glsl
   tonemap.glsl
   )
@@ -15,6 +17,7 @@ set(APPLICATION_SRC
   pch.cpp
   pch.h
   ${APPLICATION_SHADER_SRC}
+  ${APPLICATION_SYSTEM_SRC}
   )
 
 add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC})
@@ -28,4 +31,6 @@ target_precompiled_header(${LIGHTER_PROJECT} pch.h pch.cpp)
 #--------------------------------------------------------------------
 if (LIGHTER_INSTALL)
     install (TARGETS ${LIGHTER_PROJECT} DESTINATION bin)
+    install (FILES ${APPLICATION_SYSTEM_SRC} DESTINATION bin)
+    install (FILES ${APPLICATION_SHADER_SRC} DESTINATION ${LIGHTER_INSTALL_DATA_DIRECTORY})
 endif()

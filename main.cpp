@@ -10,7 +10,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <random>
+
+#include <fstream>
 
 #include "img"
 
@@ -122,10 +123,10 @@ int main()
 
 		// load shaders
 		auto preamble = "";
-		ogl::ProgramWithTime backgroundShader("background.glsl");
-		ogl::ProgramWithTime tonemapShader("tonemap.glsl");
-		ogl::ProgramWithTime textShader("text.glsl", "", ogl::ProgramWithTime::HasGS);
-		ogl::ProgramWithTime uiShader("ui.glsl", "", ogl::ProgramWithTime::HasGS);
+		ogl::ProgramWithTime backgroundShader("data/background.glsl");
+		ogl::ProgramWithTime tonemapShader("data/tonemap.glsl");
+		ogl::ProgramWithTime textShader("data/text.glsl", "", ogl::ProgramWithTime::HasGS);
+		ogl::ProgramWithTime uiShader("data/ui.glsl", "", ogl::ProgramWithTime::HasGS);
 
 		auto maybeReloadKernels = [&]()
 		{
