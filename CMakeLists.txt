@@ -20,17 +20,26 @@ set(APPLICATION_SRC
   ${APPLICATION_SYSTEM_SRC}
   )
 
-add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC})
+set(APPLICATION_DATA_STAMP ${PROJECT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/application_data.stamp)
+add_custom_command(OUTPUT ${APPLICATION_DATA_STAMP} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E touch \"${APPLICATION_DATA_STAMP}\"
+    DEPENDS ${APPLICATION_SHADER_SRC} ${LIGHTER_DATA_STAMP})
+  
+add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC} ${APPLICATION_DATA_STAMP})
 add_lighter_dependencies(${LIGHTER_PROJECT})
 copy_data_files(${LIGHTER_PROJECT} "${${LIGHTER_PROJECT}_BINARY_DIR}" "${${LIGHTER_PROJECT}_SOURCE_DIR}" "${APPLICATION_SHADER_SRC}")
 copy_lighter_data_files(${LIGHTER_PROJECT} "${${LIGHTER_PROJECT}_BINARY_DIR}")
 target_precompiled_header(${LIGHTER_PROJECT} pch.h pch.cpp)
-  
+
 #--------------------------------------------------------------------
 # Install files other than the application
 #--------------------------------------------------------------------
 if (LIGHTER_INSTALL)
     install (TARGETS ${LIGHTER_PROJECT} DESTINATION bin)
-    install (FILES ${APPLICATION_SYSTEM_SRC} DESTINATION bin)
     install (FILES ${APPLICATION_SHADER_SRC} DESTINATION ${LIGHTER_INSTALL_DATA_DIRECTORY})
+	
+    add_custom_command(TARGET ${LIGHTER_PROJECT} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -DBUILD_TYPE=$<CONFIGURATION> -P cmake_install.cmake
+		DEPENDS ${APPLICATION_SHADER_SRC}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 endif()
