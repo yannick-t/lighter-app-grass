@@ -36,6 +36,7 @@ target_precompiled_header(${LIGHTER_PROJECT} pch.h pch.cpp)
 #--------------------------------------------------------------------
 if (LIGHTER_INSTALL)
     install (TARGETS ${LIGHTER_PROJECT} DESTINATION bin)
+    install (FILES ${APPLICATION_SYSTEM_SRC} DESTINATION bin)
     install (FILES ${APPLICATION_SHADER_SRC} DESTINATION ${LIGHTER_INSTALL_DATA_DIRECTORY})
 	
     add_custom_command(TARGET ${LIGHTER_PROJECT} POST_BUILD
