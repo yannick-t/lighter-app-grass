@@ -10,14 +10,23 @@ set(APPLICATION_SHADER_SRC
   background.glsl
   tonemap.glsl
   )
-set(APPLICATION_SRC
+set(APPLICATION_CODE
   main.cpp
   obj.cpp
   obj.h
   pch.cpp
   pch.h
+  )
+set(APPLICATION_SRC
+  ${APPLICATION_CODE}
   ${APPLICATION_SHADER_SRC}
   ${APPLICATION_SYSTEM_SRC}
+  )
+source_group(
+  "Source Files" FILES ${APPLICATION_CODE}
+  )
+source_group(
+  "Source Files\\Shaders" FILES ${APPLICATION_SHADER_SRC} ${APPLICATION_SYSTEM_SRC}
   )
 
 set(APPLICATION_DATA_STAMP ${PROJECT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/application_data.stamp)
