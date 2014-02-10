@@ -9,6 +9,7 @@ set(APPLICATION_SYSTEM_SRC
 set(APPLICATION_SHADER_SRC
   background.glsl
   tonemap.glsl
+  phong.glsl
   )
 set(APPLICATION_CODE
   main.cpp
