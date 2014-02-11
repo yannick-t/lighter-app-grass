@@ -34,11 +34,9 @@ set(APPLICATION_DATA_STAMP ${PROJECT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/application
 add_custom_command(OUTPUT ${APPLICATION_DATA_STAMP}
     COMMAND ${CMAKE_COMMAND} -E touch \"${APPLICATION_DATA_STAMP}\"
     DEPENDS ${APPLICATION_SHADER_SRC} ${LIGHTER_DATA_STAMP})
-  
+
 add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC} ${APPLICATION_DATA_STAMP})
 add_lighter_dependencies(${LIGHTER_PROJECT})
-copy_data_files(${LIGHTER_PROJECT} "${${LIGHTER_PROJECT}_BINARY_DIR}" "${${LIGHTER_PROJECT}_SOURCE_DIR}" "${APPLICATION_SHADER_SRC}")
-copy_lighter_data_files(${LIGHTER_PROJECT} "${${LIGHTER_PROJECT}_BINARY_DIR}")
 target_precompiled_header(${LIGHTER_PROJECT} pch.h pch.cpp)
 
 #--------------------------------------------------------------------
