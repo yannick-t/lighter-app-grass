@@ -35,6 +35,45 @@ namespace glsl
 
 bool const stdx::is_debugger_present = IsDebuggerPresent() != FALSE;
 
+struct UiTextRenderer : ui::TextRenderer
+{
+	text::FreeType& lib;
+	text::Face &font;
+	text::TextRenderer& renderer;
+
+	UiTextRenderer(text::FreeType& lib, text::Face& font, text::TextRenderer& renderer)
+		: lib(lib), font(font), renderer(renderer) { }
+
+	virtual glm::aabb<glm::ivec2> selectChar(glm::ivec2 cursorPos, size_t& charIdx, glm::ivec2 insertPos, char const* text, size_t maxChars, CharType type)
+	{
+		switch (type)
+		{
+		case UTF8: default: return renderer.selectChar(lib, font, cursorPos, charIdx, insertPos, text, maxChars);
+		case UTF16: return renderer.selectChar(lib, font, cursorPos, charIdx, insertPos, reinterpret_cast<FT_Int16 const*>(text), maxChars);
+		case UTF32: return renderer.selectChar(lib, font, cursorPos, charIdx, insertPos, reinterpret_cast<FT_Int32 const*>(text), maxChars);
+		}
+	}
+	virtual glm::aabb<glm::ivec2> boundText(char const* text, size_t maxChars, glm::ivec2 insertPos, CharType type) override
+	{
+		switch (type)
+		{
+		case UTF8: default: return renderer.boundText(lib, font, insertPos, text, maxChars);
+		case UTF16: return renderer.boundText(lib, font, insertPos, reinterpret_cast<FT_Int16 const*>(text), maxChars);
+		case UTF32: return renderer.boundText(lib, font, insertPos, reinterpret_cast<FT_Int32 const*>(text), maxChars);
+		}
+	}
+	virtual glm::aabb<glm::ivec2> drawText(glm::ivec2 insertPos, char const* text, size_t maxChars, CharType type) override
+	{
+		switch (type)
+		{
+		case UTF8: default: return renderer.drawText(lib, font, insertPos, text, maxChars);
+		case UTF16: return renderer.drawText(lib, font, insertPos, reinterpret_cast<FT_Int16 const*>(text), maxChars);
+		case UTF32: return renderer.drawText(lib, font, insertPos, reinterpret_cast<FT_Int32 const*>(text), maxChars);
+		}
+	}
+	using TextRenderer::drawText;
+};
+
 struct Camera
 {
 	glm::vec3 pos;
@@ -162,55 +201,10 @@ int main()
 
 		// Text
 		text::FreeType freeTypeLib;
-		text::Face font(freeTypeLib, "C:/Windows/Fonts/tahoma.ttf"); // "C:/Windows/Fonts/consola.ttf", "Inconsolata-Regular.ttf", "C:/Windows/Fonts/Andale.ttf"
-		{
-			text::PxSize fontSize(23);
-			int bbw = font->bbox.xMax - font->bbox.xMin;
-			int bbh = font->bbox.yMax - font->bbox.yMin;
-//			fontSize.width = (fontSize.height * bbw + bbh - 1) / bbh;
-//			font.size(fontSize);
-			font.size(text::PtSize(10));
-		}
+		text::Face font(freeTypeLib, "C:/Windows/Fonts/tahoma.ttf", text::PtSize(10)); // "C:/Windows/Fonts/consola.ttf", "Inconsolata-Regular.ttf", "C:/Windows/Fonts/Andale.ttf"
 		ui::UiRenderer widgetRenderer(&uiShader, 1024);
 		text::TextRenderer textRenderer(freeTypeLib, &textShader, 10000);
-		struct UiTextRenderer : ui::TextRenderer
-		{
-			text::FreeType& lib;
-			text::Face &font;
-			text::TextRenderer& renderer;
-
-			UiTextRenderer(text::FreeType& lib, text::Face& font, text::TextRenderer& renderer)
-				: lib(lib), font(font), renderer(renderer) { }
-
-			virtual glm::aabb<glm::ivec2> selectChar(glm::ivec2 cursorPos, size_t& charIdx, glm::ivec2 insertPos, char const* text, size_t maxChars, CharType type)
-			{
-				switch (type)
-				{
-				case UTF8: default: return renderer.selectChar(lib, font, cursorPos, charIdx, insertPos, text, maxChars);
-				case UTF16: return renderer.selectChar(lib, font, cursorPos, charIdx, insertPos, reinterpret_cast<FT_Int16 const*>(text), maxChars);
-				case UTF32: return renderer.selectChar(lib, font, cursorPos, charIdx, insertPos, reinterpret_cast<FT_Int32 const*>(text), maxChars);
-				}
-			}
-			virtual glm::aabb<glm::ivec2> boundText(char const* text, size_t maxChars, glm::ivec2 insertPos, CharType type) override
-			{
-				switch (type)
-				{
-				case UTF8: default: return renderer.boundText(lib, font, insertPos, text, maxChars);
-				case UTF16: return renderer.boundText(lib, font, insertPos, reinterpret_cast<FT_Int16 const*>(text), maxChars);
-				case UTF32: return renderer.boundText(lib, font, insertPos, reinterpret_cast<FT_Int32 const*>(text), maxChars);
-				}
-			}
-			virtual glm::aabb<glm::ivec2> drawText(glm::ivec2 insertPos, char const* text, size_t maxChars, CharType type) override
-			{
-				switch (type)
-				{
-				case UTF8: default: return renderer.drawText(lib, font, insertPos, text, maxChars);
-				case UTF16: return renderer.drawText(lib, font, insertPos, reinterpret_cast<FT_Int16 const*>(text), maxChars);
-				case UTF32: return renderer.drawText(lib, font, insertPos, reinterpret_cast<FT_Int32 const*>(text), maxChars);
-				}
-			}
-			using TextRenderer::drawText;
-		} uiTextRenderer(freeTypeLib, font, textRenderer);
+		auto uiTextRenderer = UiTextRenderer(freeTypeLib, font, textRenderer);
 		ui::TextUi textUi(&widgetRenderer, &uiTextRenderer);
 
 		wnd.resize = [&](unsigned width, unsigned height)
@@ -240,6 +234,8 @@ int main()
 		bool paused = false;
 		bool fast = false;
 		bool mouseCaptured = false;
+
+		bool enableUi = true;
 		
 		glm::ivec2 lastMousePos;
 		glm::fvec2 mouseDelta;
@@ -314,7 +310,7 @@ int main()
 					fast = !fast;
 
 				if (key == GLFW_KEY_C && pressed)
-					textRenderer.setRenderMode( (textRenderer.renderMode != FT_RENDER_MODE_NORMAL) ? FT_RENDER_MODE_NORMAL : FT_RENDER_MODE_LCD );
+					enableUi = !enableUi;
 
 				if (key == GLFW_KEY_ENTER && pressed)
 					setMouseCapture(!mouseCaptured);
@@ -450,42 +446,31 @@ int main()
 			}
 
 			// Text
+			if (enableUi)
 			{
 				glDisable(GL_DEPTH_TEST);
 				glEnable(GL_BLEND);
-
-				glBlendEquation(GL_FUNC_ADD);
-				glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 				
 				camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
 
-				// todo: text bounds
-				auto buttonBox = textRenderer.drawText(freeTypeLib, font, glm::ivec2(500, 470),
-					"Click me!"
-					);
-				widgetRenderer.drawWidget(buttonBox.min - glm::ivec2(6, 6), glm::uvec2(buttonBox.max - buttonBox.min) + 2U * glm::uvec2(6, 6), ui::UiElement::Frame);
+				// text test
+				{
+					float fontBrightness = 0.0f;
+					glBlendColor(fontBrightness, fontBrightness, fontBrightness, 1.0f);
+					glBlendEquation(GL_FUNC_ADD);
+					glBlendFunc(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR);
 
-				widgetRenderer.drawWidget(glm::ivec2(160, 460), glm::uvec2(200, 20), ui::UiElement::Frame);
-				widgetRenderer.drawWidget(glm::ivec2(160, 460) + glm::ivec2(3, 3), glm::uvec2(200, 20) - 2U * glm::uvec2(20, 3), ui::UiElement::Bar);
-				widgetRenderer.flushWidgets();
-
-				float fontBrightness = 0.0f;
-				glBlendColor(fontBrightness, fontBrightness, fontBrightness, 1.0f);
-				glBlendEquation(GL_FUNC_ADD);
-				glBlendFunc(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR);
+					textRenderer.drawText(freeTypeLib, font, glm::ivec2(16, 16),
+						"Glyph images are always loaded, transformed, and described in the cartesian coordinate \n"
+						"system in FreeType (which means that increasing Y corresponds to upper scanlines), unlike \n"
+						"the system typically used for bitmaps (where the topmost scanline has coordinate 0). We \n"
+						"must thus convert between the two systems when we define the pen position, and when we \n"
+						"compute the topleft position of the bitmap."
+						);
+					textRenderer.flushText();
+				}
 				
-				camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
-
-				textRenderer.drawText(freeTypeLib, font, glm::ivec2(16, 16),
-					"Glyph images are always loaded, transformed, and described in the cartesian coordinate \n"
-					"system in FreeType (which means that increasing Y corresponds to upper scanlines), unlike \n"
-					"the system typically used for bitmaps (where the topmost scanline has coordinate 0). We \n"
-					"must thus convert between the two systems when we define the pen position, and when we \n"
-					"compute the topleft position of the bitmap."
-					);
-				textRenderer.flushText();
-				
-				// ui
+				// ui test
 				{
 					textUi.mouse.pos = lastMousePos;
 					textUi.mouse.primary = buttonState[GLFW_MOUSE_BUTTON_LEFT];
@@ -494,7 +479,10 @@ int main()
 					textUi.mouse.secondaryChanged = buttonChanged[GLFW_MOUSE_BUTTON_RIGHT];
 
 					textUi.reset();
-
+					
+					glBlendEquation(GL_FUNC_ADD);
+					glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+					
 					ui::TextUi::Renderer ui(&textUi, glm::ivec2(800, 300), glm::uvec2(200, 500));
 					ui.cursorVisible = halfSecond;
 					inputQueue.erase(inputQueue.begin(), inputQueue.begin() + ui.addInput(inputQueue));
@@ -510,6 +498,16 @@ int main()
 						ui.addSlider(&lightDirection, "light dir", 0.1f, 6.0f, nullptr);
 						ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed);
 					}
+					
+					widgetRenderer.flushWidgets();
+
+					float fontBrightness = 0.01f;
+					glBlendColor(fontBrightness, fontBrightness, fontBrightness, 1.0f);
+					glBlendEquation(GL_FUNC_ADD);
+//					glBlendFunc(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR);
+					glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ONE_MINUS_SRC_COLOR);
+
+					textRenderer.flushText();
 				}
 			
 				glDisable(GL_BLEND);
