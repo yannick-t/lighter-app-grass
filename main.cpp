@@ -16,7 +16,7 @@
 #include "img"
 
 #include "textx"
-#include "ui"
+#include "uix"
 
 namespace glsl
 {
@@ -472,28 +472,32 @@ int main()
 				
 				// ui test
 				{
-					textUi.mouse.pos = lastMousePos;
-					textUi.mouse.primary = buttonState[GLFW_MOUSE_BUTTON_LEFT];
-					textUi.mouse.primaryChanged = buttonChanged[GLFW_MOUSE_BUTTON_LEFT];
-					textUi.mouse.secondary = buttonState[GLFW_MOUSE_BUTTON_RIGHT];
-					textUi.mouse.secondaryChanged = buttonChanged[GLFW_MOUSE_BUTTON_RIGHT];
+					textUi.state.mouse.pos = lastMousePos;
+					textUi.state.mouse.primary = buttonState[GLFW_MOUSE_BUTTON_LEFT];
+					textUi.state.mouse.primaryChanged = buttonChanged[GLFW_MOUSE_BUTTON_LEFT];
+					textUi.state.mouse.secondary = buttonState[GLFW_MOUSE_BUTTON_RIGHT];
+					textUi.state.mouse.secondaryChanged = buttonChanged[GLFW_MOUSE_BUTTON_RIGHT];
 
-					textUi.reset();
+					textUi.state.input.insert(textUi.state.input.end(), inputQueue.begin(), inputQueue.end());
+					inputQueue.clear();
+
+					textUi.setup.rect.min = glm::ivec2(800, 300);
+					textUi.setup.rect.max = textUi.setup.rect.min + glm::ivec2(200, 500);
+
+					auto& ui = *textUi.reset();
 					
 					glBlendEquation(GL_FUNC_ADD);
 					glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 					
-					ui::TextUi::Renderer ui(&textUi, glm::ivec2(800, 300), glm::uvec2(200, 500));
-					ui.cursorVisible = halfSecond;
-					inputQueue.erase(inputQueue.begin(), inputQueue.begin() + ui.addInput(inputQueue));
+					textUi.state.cursorVisible = halfSecond;
 
-					ui::TextUiGroup uiGroup(ui, nullptr);
+					ui::Group uiGroup(ui, nullptr);
 					ui.addText(nullptr, "UI", "", nullptr);
 
 					ui.addText(nullptr, "test str", testString.c_str(), testString);
 
 					{
-						ui::TextUiGroup uiGroup(ui, nullptr);
+						ui::Group uiGroup(ui, nullptr);
 						ui.addText(nullptr, "Tweak", "", nullptr);
 						ui.addSlider(&lightDirection, "light dir", 0.1f, 6.0f, nullptr);
 						ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
