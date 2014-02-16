@@ -15,7 +15,7 @@
 
 #include "img"
 
-#include "text"
+#include "textx"
 #include "ui"
 
 namespace glsl
