@@ -472,25 +472,22 @@ int main()
 				
 				// ui test
 				{
+					textUi.state.cursorVisible = halfSecond;
+					textUi.setup.rect.min = glm::ivec2(800, 300);
+					textUi.setup.rect.max = textUi.setup.rect.min + glm::ivec2(200, 500);
+
 					textUi.state.mouse.pos = lastMousePos;
 					textUi.state.mouse.primary = buttonState[GLFW_MOUSE_BUTTON_LEFT];
 					textUi.state.mouse.primaryChanged = buttonChanged[GLFW_MOUSE_BUTTON_LEFT];
 					textUi.state.mouse.secondary = buttonState[GLFW_MOUSE_BUTTON_RIGHT];
 					textUi.state.mouse.secondaryChanged = buttonChanged[GLFW_MOUSE_BUTTON_RIGHT];
 
-					textUi.state.input.insert(textUi.state.input.end(), inputQueue.begin(), inputQueue.end());
+					auto& ui = textUi.reset(textUi.state.mouse, inputQueue);
 					inputQueue.clear();
 
-					textUi.setup.rect.min = glm::ivec2(800, 300);
-					textUi.setup.rect.max = textUi.setup.rect.min + glm::ivec2(200, 500);
-
-					auto& ui = *textUi.reset();
-					
 					glBlendEquation(GL_FUNC_ADD);
 					glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 					
-					textUi.state.cursorVisible = halfSecond;
-
 					ui::Group uiGroup(ui, nullptr);
 					ui.addText(nullptr, "UI", "", nullptr);
 
