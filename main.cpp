@@ -496,7 +496,7 @@ int main()
 						ui::TextUiGroup uiGroup(ui, nullptr);
 						ui.addText(nullptr, "Tweak", "", nullptr);
 						ui.addSlider(&lightDirection, "light dir", 0.1f, 6.0f, nullptr);
-						ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed);
+						ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
 					}
 					
 					widgetRenderer.flushWidgets();
