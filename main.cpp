@@ -14,6 +14,7 @@
 #include <fstream>
 
 #include "img"
+#include "obj.h"
 
 #include "text"
 #include "ui"
@@ -112,7 +113,7 @@ int main()
 	try
 	{
 		ogl::GLFW glfw(3, 3);
-		ogl::GLFWWindow wnd(1024, 576, "Molecules + GI", nullptr);
+		ogl::GLFWWindow wnd(1024, 576, "Rise and Shine", nullptr);
 
 		wnd.makeCurrent();
 		ogl::GLEW glew;
@@ -125,6 +126,7 @@ int main()
 		auto preamble = "";
 		ogl::ProgramWithTime backgroundShader("data/background.glsl");
 		ogl::ProgramWithTime tonemapShader("data/tonemap.glsl");
+		ogl::ProgramWithTime phongShader("data/phong.glsl");
 		ogl::ProgramWithTime textShader("data/text.glsl", "", ogl::ProgramWithTime::HasGS);
 		ogl::ProgramWithTime uiShader("data/ui.glsl", "", ogl::ProgramWithTime::HasGS);
 
@@ -132,6 +134,7 @@ int main()
 		{
 			backgroundShader.maybeReload();
 			tonemapShader.maybeReload();
+			phongShader.maybeReload();
 			textShader.maybeReload();
 			uiShader.maybeReload();
 		};
@@ -142,6 +145,10 @@ int main()
 			std::ofstream shaderBinFile("shaderBin.txt", std::ios::binary);
 			shaderBinFile.write(shaderBin.data(), shaderBin.size());
 		}
+
+		// load object
+		Obj simpleObj = parse_object(stdx::load_file("data/simple.obj").c_str());
+		RenderableMesh simpleMesh(simpleObj.v, simpleObj.n, simpleObj.f);
 
 		// window & rendering set up
 		Camera camera;
@@ -388,6 +395,18 @@ int main()
 				nullVertexArrays.bind();
 				backgroundShader.bind();
 				glDrawArrays(GL_TRIANGLES, 0, 3);
+			}
+
+			// Test scene
+			{
+				hdrBuffer.bind(GL_FRAMEBUFFER);
+
+				glEnable(GL_DEPTH_TEST);
+				camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
+
+				simpleMesh.bind();
+				phongShader.bind();
+				simpleMesh.draw(GL_TRIANGLES, 0, (unsigned) simpleObj.f.size() * 3);
 			}
 			
 			// Blit / tonemap

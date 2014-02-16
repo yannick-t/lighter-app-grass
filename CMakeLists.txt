@@ -1,6 +1,14 @@
 project(${LIGHTER_PROJECT})
 
 #--------------------------------------------------------------------
+# Data
+#--------------------------------------------------------------------
+set(APPLICATION_DATA
+  data/simple.obj
+  data/simpler.obj
+  )
+  
+#--------------------------------------------------------------------
 # Create target
 #--------------------------------------------------------------------
 set(APPLICATION_SYSTEM_SRC
@@ -33,7 +41,7 @@ source_group(
 set(APPLICATION_DATA_STAMP ${PROJECT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/application_data.stamp)
 add_custom_command(OUTPUT ${APPLICATION_DATA_STAMP}
     COMMAND ${CMAKE_COMMAND} -E touch \"${APPLICATION_DATA_STAMP}\"
-    DEPENDS ${APPLICATION_SHADER_SRC} ${LIGHTER_DATA_STAMP})
+    DEPENDS ${APPLICATION_SHADER_SRC} ${APPLICATION_DATA} ${LIGHTER_DATA_STAMP})
 
 add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC} ${APPLICATION_DATA_STAMP})
 add_lighter_dependencies(${LIGHTER_PROJECT})
@@ -45,7 +53,7 @@ target_precompiled_header(${LIGHTER_PROJECT} pch.h pch.cpp)
 if (LIGHTER_INSTALL)
     install (TARGETS ${LIGHTER_PROJECT} DESTINATION bin)
     install (FILES ${APPLICATION_SYSTEM_SRC} DESTINATION bin)
-    install (FILES ${APPLICATION_SHADER_SRC} DESTINATION ${LIGHTER_INSTALL_DATA_DIRECTORY})
+    install (FILES ${APPLICATION_SHADER_SRC} ${APPLICATION_DATA} DESTINATION ${LIGHTER_INSTALL_DATA_DIRECTORY})
 	
     add_custom_command(TARGET ${LIGHTER_PROJECT} POST_BUILD COMMAND ${LIGHTER_INSTALL_COMMAND})
 endif()
