@@ -15,8 +15,8 @@
 
 #include "img"
 
-#include "textx"
-#include "uix"
+#include "text"
+#include "ui"
 
 namespace glsl
 {
@@ -34,45 +34,6 @@ namespace glsl
 // Escape: ESC
 
 bool const stdx::is_debugger_present = IsDebuggerPresent() != FALSE;
-
-struct UiTextRenderer : ui::TextRenderer
-{
-	text::FreeType& lib;
-	text::Face &font;
-	text::TextRenderer& renderer;
-
-	UiTextRenderer(text::FreeType& lib, text::Face& font, text::TextRenderer& renderer)
-		: lib(lib), font(font), renderer(renderer) { }
-
-	virtual glm::aabb<glm::ivec2> selectChar(glm::ivec2 cursorPos, size_t& charIdx, glm::ivec2 insertPos, char const* text, size_t maxChars, CharType type)
-	{
-		switch (type)
-		{
-		case UTF8: default: return renderer.selectChar(lib, font, cursorPos, charIdx, insertPos, text, maxChars);
-		case UTF16: return renderer.selectChar(lib, font, cursorPos, charIdx, insertPos, reinterpret_cast<FT_Int16 const*>(text), maxChars);
-		case UTF32: return renderer.selectChar(lib, font, cursorPos, charIdx, insertPos, reinterpret_cast<FT_Int32 const*>(text), maxChars);
-		}
-	}
-	virtual glm::aabb<glm::ivec2> boundText(char const* text, size_t maxChars, glm::ivec2 insertPos, CharType type) override
-	{
-		switch (type)
-		{
-		case UTF8: default: return renderer.boundText(lib, font, insertPos, text, maxChars);
-		case UTF16: return renderer.boundText(lib, font, insertPos, reinterpret_cast<FT_Int16 const*>(text), maxChars);
-		case UTF32: return renderer.boundText(lib, font, insertPos, reinterpret_cast<FT_Int32 const*>(text), maxChars);
-		}
-	}
-	virtual glm::aabb<glm::ivec2> drawText(glm::ivec2 insertPos, char const* text, size_t maxChars, CharType type) override
-	{
-		switch (type)
-		{
-		case UTF8: default: return renderer.drawText(lib, font, insertPos, text, maxChars);
-		case UTF16: return renderer.drawText(lib, font, insertPos, reinterpret_cast<FT_Int16 const*>(text), maxChars);
-		case UTF32: return renderer.drawText(lib, font, insertPos, reinterpret_cast<FT_Int32 const*>(text), maxChars);
-		}
-	}
-	using TextRenderer::drawText;
-};
 
 struct Camera
 {
@@ -202,10 +163,8 @@ int main()
 		// Text
 		text::FreeType freeTypeLib;
 		text::Face font(freeTypeLib, "C:/Windows/Fonts/tahoma.ttf", text::PtSize(10)); // "C:/Windows/Fonts/consola.ttf", "Inconsolata-Regular.ttf", "C:/Windows/Fonts/Andale.ttf"
-		ui::UiRenderer widgetRenderer(&uiShader, 1024);
-		text::TextRenderer textRenderer(freeTypeLib, &textShader, 10000);
-		auto uiTextRenderer = UiTextRenderer(freeTypeLib, font, textRenderer);
-		ui::TextUi textUi(&widgetRenderer, &uiTextRenderer);
+		auto textUiPtr = ui::UserInterface::create(&freeTypeLib, &font, &textShader, &uiShader);
+		auto& textUi = *textUiPtr;
 
 		wnd.resize = [&](unsigned width, unsigned height)
 		{
@@ -460,7 +419,7 @@ int main()
 					glBlendEquation(GL_FUNC_ADD);
 					glBlendFunc(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR);
 
-					textRenderer.drawText(freeTypeLib, font, glm::ivec2(16, 16),
+/*					textRenderer.drawText(freeTypeLib, font, glm::ivec2(16, 16),
 						"Glyph images are always loaded, transformed, and described in the cartesian coordinate \n"
 						"system in FreeType (which means that increasing Y corresponds to upper scanlines), unlike \n"
 						"the system typically used for bitmaps (where the topmost scanline has coordinate 0). We \n"
@@ -468,7 +427,7 @@ int main()
 						"compute the topleft position of the bitmap."
 						);
 					textRenderer.flushText();
-				}
+*/				}
 				
 				// ui test
 				{
@@ -500,7 +459,7 @@ int main()
 						ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
 					}
 					
-					widgetRenderer.flushWidgets();
+					textUi.flushWidgets();
 
 					float fontBrightness = 0.01f;
 					glBlendColor(fontBrightness, fontBrightness, fontBrightness, 1.0f);
@@ -508,7 +467,7 @@ int main()
 //					glBlendFunc(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR);
 					glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ONE_MINUS_SRC_COLOR);
 
-					textRenderer.flushText();
+					textUi.flushText();
 				}
 			
 				glDisable(GL_BLEND);
