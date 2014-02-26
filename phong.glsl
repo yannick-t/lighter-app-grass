@@ -9,8 +9,8 @@ layout(std140) uniform Camera
 
 #ifdef IN_VS
 
-in vec3 pos;
-in vec3 normal;
+layout(location = 0) in vec3 pos;
+layout(location = 1) in vec3 normal;
 
 out vec3 worldPos;
 out vec3 normalUnnrm;
@@ -23,7 +23,7 @@ void main()
 }
 
 #endif
-
+/*
 mat3 tangent_frame(vec3 N, vec3 p, vec2 uv)
 {
 	// get edge vectors of the pixel triangle
@@ -78,7 +78,7 @@ mat3 cotangent_frame(vec3 p, vec2 uv)
 	// T, B precisely scaled, N orthonormal
 	return mat3(T * D, B * D, N * DN);
 }
-
+*/
 #ifdef IN_FS
 
 layout(location = 0) out vec4 color0;
