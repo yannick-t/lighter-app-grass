@@ -466,16 +466,24 @@ int main()
 					glBlendEquation(GL_FUNC_ADD);
 					glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 					
-					ui::Group uiGroup(ui, nullptr);
-					ui.addText(nullptr, "UI", "", nullptr);
-
-					ui.addText(nullptr, "test str", testString.c_str(), testString);
-
+					if (auto uiGroup = ui::Group(ui, nullptr))
 					{
-						ui::Group uiGroup(ui, nullptr);
-						ui.addText(nullptr, "Tweak", "", nullptr);
-						ui.addSlider(&lightDirection, "light dir", 0.1f, 6.0f, nullptr);
-						ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
+						ui.addText(nullptr, "UI", "", nullptr);
+
+						ui.addText(nullptr, "test str", testString.c_str(), testString);
+
+						if (auto uiGroup = ui::Group(ui, nullptr))
+						{
+							ui.addText(nullptr, "Tweak", "", nullptr);
+							ui.addSlider(&lightDirection, "light dir", 0.1f, 6.0f, nullptr);
+							ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
+
+//							if (auto uiUnion = ui::Union(ui))
+							{
+								ui.addButton(3, "test button", nullptr);
+								ui.addButton(4, "test button", true, nullptr);
+							}
+						}
 					}
 					
 					textUi.flushWidgets();
