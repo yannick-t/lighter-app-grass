@@ -16,7 +16,9 @@ Obj parse_object(char const* objText)
 	appx::Task task("obj");
 
 	bool normalsReordered = false;
+	bool texcoordsReordered = false;
 	std::vector<glm::pod_vec<unsigned, 3>> nf;
+	std::vector<glm::pod_vec<unsigned, 3>> tf;
 
 	for (char const* objCursor = objText; *objCursor; )
 	{
@@ -58,6 +60,19 @@ Obj parse_object(char const* objText)
 						obj.n.push_back(vec);
 					}
 					break;
+				// Texcoord
+				case 't':
+					{
+						++objCursor;
+
+						glm::pod_vec<float, 2> vec;
+						char* numEnd;
+						vec.c[0] = (float) strtod(objCursor, &numEnd); objCursor = numEnd;
+						vec.c[1] = (float) strtod(objCursor, &numEnd); objCursor = numEnd;
+						strtod(objCursor, &numEnd); objCursor = numEnd;
+						obj.t.push_back(vec);
+					}
+					break;
 				}
 			}
 			break;
@@ -69,9 +84,11 @@ Obj parse_object(char const* objText)
 
 				glm::pod_vec<unsigned, 3> vind = { };
 				glm::pod_vec<unsigned, 3> nind = { };
+				glm::pod_vec<unsigned, 3> tind = { };
 
 				auto nv = (long) obj.v.size();
 				auto nn = (long) obj.n.size();
+				auto nt = (long) obj.t.size();
 
 				for (int i = 0; i < 3; ++i)
 				{
@@ -88,7 +105,12 @@ Obj parse_object(char const* objText)
 					{
 						++objCursor;
 						l = strtol(objCursor, &numEnd, 10);
+						if (l < 0) l += nt;
+						else --l;
+						tind.c[i] = (unsigned) l;
 						objCursor = numEnd;
+
+						texcoordsReordered |= tind.c[i] != vind.c[i];
 
 						if (*objCursor == '/')
 						{
@@ -106,6 +128,7 @@ Obj parse_object(char const* objText)
 
 				obj.f.push_back(vind);
 				nf.push_back(nind);
+				tf.push_back(tind);
 			}
 			break;
 
@@ -146,7 +169,25 @@ Obj parse_object(char const* objText)
 
 		for (size_t i = 0, ie = nf.size(); i < ie; ++i)
 			for (size_t j = 0; j < 3; ++j)
-				obj.n[obj.f[i].c[j]] = unorderedN[nf[i].c[j]];
+			{
+				auto k = nf[i].c[j];
+				if (k != -1)
+					obj.n[obj.f[i].c[j]] = unorderedN[k];
+			}
+	}
+
+	if (texcoordsReordered)
+	{
+		auto unorderedT = std::move(obj.t);
+		obj.t.resize(obj.v.size());
+
+		for (size_t i = 0, ie = tf.size(); i < ie; ++i)
+			for (size_t j = 0; j < 3; ++j)
+			{
+				auto k = tf[i].c[j];
+				if (k != -1)
+					obj.t[obj.f[i].c[j]] = unorderedT[k];
+			}
 	}
 
 	return obj;

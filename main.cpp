@@ -74,13 +74,15 @@ struct RenderableMesh
 {
 	ogl::Buffer positions;
 	ogl::Buffer normals;
+	ogl::Buffer texCoords;
 	ogl::VertexArrays vertices;
 	ogl::Buffer indices;
 
-	template <class V, class N, class I>
-	RenderableMesh(V const& vposRange, N const& vnrmRange, I const& idcsRange)
+	template <class V, class N, class T, class I>
+	RenderableMesh(V const& vposRange, N const& vnrmRange, T const& vtexRange, I const& idcsRange)
 		: positions(ogl::Buffer::init(GL_ARRAY_BUFFER, vposRange))
 		, normals(ogl::Buffer::init(GL_ARRAY_BUFFER, vnrmRange))
+		, texCoords(vtexRange.empty() ? nullptr : ogl::Buffer::init(GL_ARRAY_BUFFER, vtexRange))
 		, indices(ogl::Buffer::init(GL_ELEMENT_ARRAY_BUFFER, idcsRange))
 	{
 		vertices.bind();
@@ -90,6 +92,11 @@ struct RenderableMesh
 		normals.bind(GL_ARRAY_BUFFER);
 		glEnableVertexAttribArray(1);
 		glVertexAttribPointer(1, sizeof(*vnrmRange.data()) / sizeof(float), GL_FLOAT, GL_FALSE, 0, nullptr);
+		if (texCoords) {
+			texCoords.bind(GL_ARRAY_BUFFER);
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, sizeof(*vtexRange.data()) / sizeof(float), GL_FLOAT, GL_FALSE, 0, nullptr);
+		}
 	}
 
 	void bind()
@@ -148,7 +155,7 @@ int main()
 
 		// load object
 		Obj simpleObj = parse_object(stdx::load_file("data/simple.obj").c_str());
-		RenderableMesh simpleMesh(simpleObj.v, simpleObj.n, simpleObj.f);
+		RenderableMesh simpleMesh(simpleObj.v, simpleObj.n, simpleObj.t, simpleObj.f);
 
 		// window & rendering set up
 		Camera camera;
