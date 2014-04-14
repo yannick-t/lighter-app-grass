@@ -7,19 +7,32 @@ layout(std140) uniform Camera
 	CameraConstants camera;
 };
 
+#ifdef VERTEX_OUT
+out VertexData
+{
+	vec3 worldPos;
+	vec3 worldNormal;
+} vout VERTEX_OUT_ARRAY;
+#endif
+
+#ifdef VERTEX_IN
+in VertexData
+{
+	vec3 worldPos;
+	vec3 worldNormal;
+} vin VERTEX_IN_ARRAY;
+#endif
+
 #ifdef IN_VS
 
 layout(location = 0) in vec3 pos;
 layout(location = 1) in vec3 normal;
 
-out vec3 worldPos;
-out vec3 normalUnnrm;
-
 void main()
 {
 	gl_Position = camera.ViewProj * vec4(pos, 1.0);
-	worldPos = pos;
-	normalUnnrm = normal;
+	vout.worldPos = pos;
+	vout.worldNormal = normal;
 }
 
 #endif
@@ -83,12 +96,9 @@ mat3 cotangent_frame(vec3 p, vec2 uv)
 
 layout(location = 0) out vec4 color0;
 
-in vec3 worldPos;
-in vec3 normalUnnrm;
-
 void main()
 {
-	vec3 normal = normalize(normalUnnrm);
+	vec3 normal = normalize(vin.worldNormal);
 	vec3 color = 0.5 + 0.5 * normal;
 	color *= clamp(0.2f + 0.8 * normal.y, 0.f, 1.f);
 	color0 = vec4(color, 1.0);
