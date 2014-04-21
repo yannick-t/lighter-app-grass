@@ -14,7 +14,7 @@
 #include <fstream>
 
 #include "img"
-#include "obj.h"
+#include "scenex"
 
 #include "text"
 #include "ui"
@@ -154,8 +154,8 @@ int main()
 		}
 
 		// load object
-		Obj simpleObj = parse_object(stdx::load_file("data/simple.obj").c_str());
-		RenderableMesh simpleMesh(simpleObj.v, simpleObj.n, simpleObj.t, simpleObj.f);
+		auto simpleScene = scene::load_scene(stdx::load_binary_file("data/simple.scene"), scene::io_error_handlers::exception);
+		RenderableMesh simpleMesh(simpleScene.positions, simpleScene.normals, simpleScene.texcoords, simpleScene.indices);
 
 		// window & rendering set up
 		Camera camera;
@@ -413,7 +413,7 @@ int main()
 
 				simpleMesh.bind();
 				phongShader.bind();
-				simpleMesh.draw(GL_TRIANGLES, 0, (unsigned) simpleObj.f.size() * 3);
+				simpleMesh.draw(GL_TRIANGLES, 0, (unsigned) simpleScene.indices.size());
 			}
 			
 			// Blit / tonemap
