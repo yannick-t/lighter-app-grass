@@ -488,7 +488,7 @@ int main()
 //							if (auto uiUnion = ui::Union(ui))
 							{
 								ui.addButton(3, "test button", nullptr);
-								ui.addButton(4, "test button", true, nullptr);
+								ui.addInteractiveButton(4, "test button", true, nullptr);
 							}
 						}
 					}
