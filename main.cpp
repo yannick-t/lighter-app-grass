@@ -215,7 +215,7 @@ int main()
 		wnd.mouse = [&](int x, int y)
 		{
 			glm::ivec2 mousePos(x, y);
-			mouseDelta = glm::vec2(mousePos - lastMousePos) / glm::vec2(screenDim);
+			mouseDelta += glm::vec2(mousePos - lastMousePos) / glm::vec2(screenDim);
 			lastMousePos = mousePos;
 		};
 
