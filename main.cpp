@@ -3,6 +3,7 @@
 #include "mathx"
 
 #include "ogl"
+#include "input"
 
 #include "stdx" 
 #include "appx" 
@@ -119,15 +120,25 @@ int main()
 {
 	try
 	{
-		ogl::GLFW glfw(3, 3);
-		ogl::GLFWWindow wnd(1024, 576, "Rise and Shine", nullptr);
+		ogl::Platform platform(3, 3);
+		ogl::Window wnd(1024, 576, "Rise and Shine", nullptr);
 
+		// window & rendering set up
 		wnd.makeCurrent();
 		ogl::GLEW glew;
-		glfw.enableVSync(false);
-		glfw.enableDebugMessages();
+		platform.enableVSync(false);
+		platform.enableDebugMessages();
 		glEnable(GL_FRAMEBUFFER_SRGB);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+		// input handling
+		input::Mouse mouse(wnd);
+		input::UiKeyboard keyboard(wnd, ui::InputKeys());
+
+		keyboard.keyEvent[GLFW_KEY_ESCAPE].pressOnce = [&]() { glfwSetWindowShouldClose(wnd, true); };
+		
+		keyboard.keyEvent[GLFW_KEY_ENTER].pressOnce = [&]() { mouse.setMouseCapture(wnd, !mouse.mouseCaptured); };
+		mouse.buttonEvent[GLFW_MOUSE_BUTTON_RIGHT].all = [&](bool pressed) { mouse.setMouseCapture(wnd, pressed); };
 
 		// load shaders
 		auto preamble = "";
@@ -145,6 +156,7 @@ int main()
 			textShader.maybeReload();
 			uiShader.maybeReload();
 		};
+		keyboard.keyEvent[GLFW_KEY_R].pressOnce = [&]() { maybeReloadKernels(); };
 		
 		if (false)
 		{
@@ -156,29 +168,40 @@ int main()
 		// load object
 		Obj simpleObj = parse_object(stdx::load_file("data/simple.obj").c_str());
 		RenderableMesh simpleMesh(simpleObj.v, simpleObj.n, simpleObj.t, simpleObj.f);
-
-		// window & rendering set up
-		Camera camera;
-		camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.3f) * 10.0f, glm::vec3(), glm::vec3(0.0f, 1.0f, 0.0f));
-		glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
-
-		glm::uvec2 screenDim;
-		ogl::Texture hdrTexture = nullptr;
-		ogl::RenderBuffer depthBuffer = nullptr;
-		ogl::Framebuffer hdrBuffer = nullptr;
-
-		// Environment map
+		
+		// load environment map
 		ogl::Texture envMap = nullptr;
 		{
 //			auto image = img::load_image<float, 3>(stdx::load_binary_file("beach_probe.hdr"));
 //			envMap = ogl::Texture::create2D(GL_TEXTURE_2D, GL_RGBA16F, image.dim.x, image.dim.y, 0, image.pixels.data(), GL_FLOAT, GL_RGB);
 		}
 
+		// camera
+		Camera camera;
+		camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.3f) * 10.0f, glm::vec3(), glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
+		
+		auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
+
+		// quad processing necessities
+		auto nullVertexArrays = ogl::VertexArrays();
+		nullVertexArrays.bind();
+		auto dummyVertexBuffer = ogl::Buffer::create(GL_ARRAY_BUFFER, sizeof(float) * 3);
+		glVertexAttribPointer(0, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
+		glEnableVertexAttribArray(0);
+		nullVertexArrays.unbind();
+
 		// Text
 		text::FreeType freeTypeLib;
 		text::Face font(freeTypeLib, "C:/Windows/Fonts/tahoma.ttf", text::PtSize(10)); // "C:/Windows/Fonts/consola.ttf", "Inconsolata-Regular.ttf", "C:/Windows/Fonts/Andale.ttf"
 		auto textUiPtr = ui::UserInterface::create(&freeTypeLib, &font, &textShader, &uiShader);
 		auto& textUi = *textUiPtr;
+		
+		// framebuffer setup
+		glm::uvec2 screenDim;
+		ogl::Texture hdrTexture = nullptr;
+		ogl::RenderBuffer depthBuffer = nullptr;
+		ogl::Framebuffer hdrBuffer = nullptr;
 
 		wnd.resize = [&](unsigned width, unsigned height)
 		{
@@ -203,105 +226,18 @@ int main()
 		};
 		wnd.initialResize();
 
-		// input handling
-		bool paused = false;
-		bool fast = false;
-		bool mouseCaptured = false;
-
-		bool enableUi = true;
-		
-		glm::ivec2 lastMousePos;
-		glm::fvec2 mouseDelta;
-		wnd.mouse = [&](int x, int y)
-		{
-			glm::ivec2 mousePos(x, y);
-			mouseDelta += glm::vec2(mousePos - lastMousePos) / glm::vec2(screenDim);
-			lastMousePos = mousePos;
-		};
-
-		auto setMouseCapture = [&](bool capture)
-		{
-			if (capture)
-				glfwSetInputMode(wnd, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-			else
-				glfwSetInputMode(wnd, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-			
-			double x, y;
-			glfwGetCursorPos(wnd, &x, &y);
-			lastMousePos = glm::ivec2((int) x, (int) y);
-			
-			mouseCaptured = capture;
-		};
-		
-		bool buttonState[16] = { };
-		bool buttonChanged[16] = { };
-		wnd.buttons = [&](int key, bool pressed)
-		{
-			buttonState[key] = pressed;
-			buttonChanged[key] = true;
-
-			if (key == GLFW_MOUSE_BUTTON_RIGHT)
-				setMouseCapture(pressed);
-		};
-		
-		std::vector<unsigned> inputQueue;
-		wnd.text = [&](unsigned chr)
-		{
-			inputQueue.push_back(chr);
-		};
-
-		bool keyState[GLFW_KEY_LAST] = { };
-		bool keyChanged[GLFW_KEY_LAST] = { };
-		wnd.keyboard = [&](int key, bool pressed, bool repeat)
-		{
-			if (pressed) switch (key)
-			{
-				unsigned key;
-				case GLFW_KEY_BACKSPACE: key = ui::InputKeys::DeleteLast; goto INSERT_INPUT_KEY;
-				case GLFW_KEY_DELETE: key = ui::InputKeys::DeleteNext; goto INSERT_INPUT_KEY;
-				case GLFW_KEY_LEFT: key = ui::InputKeys::MoveLeft; goto INSERT_INPUT_KEY;
-				case GLFW_KEY_RIGHT: key = ui::InputKeys::MoveRight; goto INSERT_INPUT_KEY;
-				case GLFW_KEY_UP: key = ui::InputKeys::MoveUp; goto INSERT_INPUT_KEY;
-				case GLFW_KEY_DOWN: key = ui::InputKeys::MoveDown; goto INSERT_INPUT_KEY;
-				INSERT_INPUT_KEY: inputQueue.push_back(key);
-			}
-
-			if (!repeat)
-			{
-				keyState[key] = pressed;
-				keyChanged[key] = true;
-
-				if (key == GLFW_KEY_ESCAPE && pressed)
-					glfwSetWindowShouldClose(wnd, true);
-
-				if (key == GLFW_KEY_R && pressed)
-					maybeReloadKernels();
-
-				if (key == GLFW_KEY_P && pressed)
-					paused = !paused;
-				if (key == GLFW_KEY_F && pressed)
-					fast = !fast;
-
-				if (key == GLFW_KEY_C && pressed)
-					enableUi = !enableUi;
-
-				if (key == GLFW_KEY_ENTER && pressed)
-					setMouseCapture(!mouseCaptured);
-			}
-		};
-
-		auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
-
-		auto nullVertexArrays = ogl::VertexArrays();
-		nullVertexArrays.bind();
-		auto dummyVertexBuffer = ogl::Buffer::create(GL_ARRAY_BUFFER, sizeof(float) * 3);
-		glVertexAttribPointer(0, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
-		glEnableVertexAttribArray(0);
-		nullVertexArrays.unbind();
-
 		std::string testString = "test str";
 
 		// main loop
+		bool paused = false;
+		keyboard.keyEvent[GLFW_KEY_P].pressOnce = [&]() { paused = !paused; };
+
+		bool fast = false;
+		keyboard.keyEvent[GLFW_KEY_F].pressOnce = [&]() { fast = !fast; };
+
+		bool enableUi = true;
+		keyboard.keyEvent[GLFW_KEY_U].pressOnce = [&]() { enableUi = !enableUi; };
+
 		double lastTime = glfwGetTime();
 		float animTime = 0.0f;
 		unsigned frameIdx = 0;
@@ -335,9 +271,9 @@ int main()
 
 			// handle camera input
 			{
-				if (mouseCaptured)
+				if (mouse.mouseCaptured)
 				{
-					auto rotationDelta = -90.0f * mouseDelta;
+					auto rotationDelta = -90.0f * mouse.relativeMouseDelta(wnd);
 				
 					camera.orientation = (glm::mat3) glm::rotate(glm::mat4(camera.orientation), rotationDelta.x, glm::vec3(0.0f, 1.0f, 0.0f));
 					camera.orientation = (glm::mat3) glm::rotate(glm::mat4(camera.orientation), rotationDelta.y, glm::vec3(1.0f, 0.0f, 0.0f));
@@ -345,13 +281,13 @@ int main()
 				}
 
 				auto moveDelta = dt * 3.0f * camSpeed
-					* (1.0f + 3.0f * keyState[GLFW_KEY_LEFT_SHIFT])
-					* glm::mix(1.0f, 0.3f, keyState[GLFW_KEY_LEFT_CONTROL]);
+					* (1.0f + 3.0f * keyboard.keyState[GLFW_KEY_LEFT_SHIFT])
+					* glm::mix(1.0f, 0.3f, keyboard.keyState[GLFW_KEY_LEFT_CONTROL]);
 
 				glm::ivec3 moveInput(
-					  keyState[GLFW_KEY_D] - keyState[GLFW_KEY_A]
-					, keyState[GLFW_KEY_SPACE] - keyState[GLFW_KEY_Q]
-					, keyState[GLFW_KEY_S] - keyState[GLFW_KEY_W]
+					  keyboard.keyState[GLFW_KEY_D] - keyboard.keyState[GLFW_KEY_A]
+					, keyboard.keyState[GLFW_KEY_SPACE] - keyboard.keyState[GLFW_KEY_Q]
+					, keyboard.keyState[GLFW_KEY_S] - keyboard.keyState[GLFW_KEY_W]
 				);
 
 				camera.pos += moveDelta * (camera.orientation * glm::vec3(moveInput));
@@ -461,14 +397,14 @@ int main()
 					textUi.setup.rect.min = glm::ivec2(800, 300);
 					textUi.setup.rect.max = textUi.setup.rect.min + glm::ivec2(200, 500);
 
-					textUi.state.mouse.pos = lastMousePos;
-					textUi.state.mouse.primary = buttonState[GLFW_MOUSE_BUTTON_LEFT];
-					textUi.state.mouse.primaryChanged = buttonChanged[GLFW_MOUSE_BUTTON_LEFT];
-					textUi.state.mouse.secondary = buttonState[GLFW_MOUSE_BUTTON_RIGHT];
-					textUi.state.mouse.secondaryChanged = buttonChanged[GLFW_MOUSE_BUTTON_RIGHT];
+					textUi.state.mouse.pos = mouse.lastMousePos;
+					textUi.state.mouse.primary = mouse.buttonState[GLFW_MOUSE_BUTTON_LEFT];
+					textUi.state.mouse.primaryChanged = mouse.buttonChanged[GLFW_MOUSE_BUTTON_LEFT];
+					textUi.state.mouse.secondary = mouse.buttonState[GLFW_MOUSE_BUTTON_RIGHT];
+					textUi.state.mouse.secondaryChanged = mouse.buttonChanged[GLFW_MOUSE_BUTTON_RIGHT];
 
-					auto& ui = textUi.reset(textUi.state.mouse, inputQueue);
-					inputQueue.clear();
+					auto& ui = textUi.reset(textUi.state.mouse, keyboard.inputQueue);
+					keyboard.inputQueue.clear();
 
 					glBlendEquation(GL_FUNC_ADD);
 					glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -510,10 +446,9 @@ int main()
 			{
 				wnd.swapBuffers();
 
-				// reset input
-				mouseDelta = glm::vec2();
-				memset(keyChanged, 0, sizeof(keyChanged));
-				memset(buttonChanged, 0, sizeof(buttonChanged));
+				// accept input
+				mouse.accept();
+				keyboard.accept();
 			}
 			
 			++frameIdx;
