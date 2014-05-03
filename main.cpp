@@ -184,12 +184,7 @@ int main()
 		auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
 
 		// quad processing necessities
-		auto nullVertexArrays = ogl::VertexArrays();
-		nullVertexArrays.bind();
-		auto dummyVertexBuffer = ogl::Buffer::create(GL_ARRAY_BUFFER, sizeof(float) * 3);
-		glVertexAttribPointer(0, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
-		glEnableVertexAttribArray(0);
-		nullVertexArrays.unbind();
+		ogl::NullVertexArray nullVertexArrays;
 
 		// Text
 		text::FreeType freeTypeLib;
