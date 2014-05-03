@@ -221,9 +221,7 @@ int main()
 		};
 		wnd.initialResize();
 
-		std::string testString = "test str";
-
-		// main loop
+		// state
 		bool paused = false;
 		keyboard.keyEvent[GLFW_KEY_P].pressOnce = [&]() { paused = !paused; };
 
@@ -232,13 +230,35 @@ int main()
 
 		bool enableUi = true;
 		keyboard.keyEvent[GLFW_KEY_U].pressOnce = [&]() { enableUi = !enableUi; };
+		
+		float camSpeed = 1.0f;
 
+		std::string testString = "test str";
+
+		// test ui
+		auto&& tweakUi = [&](ui::UniversalInterface& ui)
+		{
+			if (auto uiGroup = ui::Group(ui, nullptr))
+			{
+				ui.addText(nullptr, "Tweak", "", nullptr);
+				ui.addText(nullptr, "test str", testString.c_str(), testString);
+				ui.addSlider(&lightDirection, "light dir", 0.1f, 6.0f, nullptr);
+				ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
+
+//				if (auto uiUnion = ui::Union(ui))
+				{
+					ui.addButton(3, "test button", nullptr);
+					ui.addInteractiveButton(4, "test button", true, nullptr);
+				}
+			}
+		};
+
+		// main loop
 		double lastTime = glfwGetTime();
 		float animTime = 0.0f;
 		unsigned frameIdx = 0;
 		float smoothDt = 1.0f;
 		float smoothFDt = 1.0f;
-		float camSpeed = 1.0f;
 
 		while (!wnd.shouldClose())
 		{
@@ -389,7 +409,7 @@ int main()
 				// ui test
 				{
 					textUi.state.cursorVisible = halfSecond;
-					textUi.setup.rect.min = glm::ivec2(800, 300);
+					textUi.setup.rect.min = glm::ivec2(screenDim.x - 220, 300);
 					textUi.setup.rect.max = textUi.setup.rect.min + glm::ivec2(200, 500);
 
 					textUi.state.mouse.pos = mouse.lastMousePos;
@@ -404,25 +424,8 @@ int main()
 					glBlendEquation(GL_FUNC_ADD);
 					glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 					
-					if (auto uiGroup = ui::Group(ui, nullptr))
-					{
-						ui.addText(nullptr, "UI", "", nullptr);
-
-						ui.addText(nullptr, "test str", testString.c_str(), testString);
-
-						if (auto uiGroup = ui::Group(ui, nullptr))
-						{
-							ui.addText(nullptr, "Tweak", "", nullptr);
-							ui.addSlider(&lightDirection, "light dir", 0.1f, 6.0f, nullptr);
-							ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
-
-//							if (auto uiUnion = ui::Union(ui))
-							{
-								ui.addButton(3, "test button", nullptr);
-								ui.addInteractiveButton(4, "test button", true, nullptr);
-							}
-						}
-					}
+					ui.addSlider(&dt, "dt (ms)", dt * 1000.0f, 500.0f, nullptr);
+					tweakUi(ui);
 					
 					textUi.flushWidgets();
 
