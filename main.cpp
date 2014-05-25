@@ -74,15 +74,16 @@ struct Camera
 
 struct RenderableMesh
 {
+	ogl::VertexArrays vertices;
 	ogl::Buffer positions;
 	ogl::Buffer normals;
 	ogl::Buffer texCoords;
-	ogl::VertexArrays vertices;
 	ogl::Buffer indices;
 
 	template <class V, class N, class T, class I>
 	RenderableMesh(V const& vposRange, N const& vnrmRange, T const& vtexRange, I const& idcsRange)
-		: positions(ogl::Buffer::init(GL_ARRAY_BUFFER, vposRange))
+		: vertices(ogl::VertexArrays::create())
+		, positions(ogl::Buffer::init(GL_ARRAY_BUFFER, vposRange))
 		, normals(ogl::Buffer::init(GL_ARRAY_BUFFER, vnrmRange))
 		, texCoords(vtexRange.empty() ? nullptr : ogl::Buffer::init(GL_ARRAY_BUFFER, vtexRange))
 		, indices(ogl::Buffer::init(GL_ELEMENT_ARRAY_BUFFER, idcsRange))
@@ -187,7 +188,7 @@ int run()
 
 	// Text
 	text::FreeType freeTypeLib;
-	text::Face font(freeTypeLib, "C:/Windows/Fonts/tahoma.ttf", text::PtSize(10)); // "C:/Windows/Fonts/consola.ttf", "Inconsolata-Regular.ttf", "C:/Windows/Fonts/Andale.ttf"
+	auto font = text::Face::create(freeTypeLib, "C:/Windows/Fonts/tahoma.ttf", text::PtSize(10)); // "C:/Windows/Fonts/consola.ttf", "Inconsolata-Regular.ttf", "C:/Windows/Fonts/Andale.ttf"
 	auto textUiPtr = ui::UserInterface::create(&freeTypeLib, &font, &textShader, &uiShader);
 	auto& textUi = *textUiPtr;
 	
