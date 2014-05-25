@@ -1,4 +1,5 @@
 #define DEBUG_EXCEPTIONS
+#define NO_DEFAULT_ASSIGN_NULL_REFERENCE
 
 #include "stdx"
 #include "mathx"
