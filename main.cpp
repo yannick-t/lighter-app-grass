@@ -9,6 +9,8 @@
 #include "ogl"
 #include "input"
 
+#include "pool"
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -142,19 +144,19 @@ int run()
 
 	// load shaders
 	auto preamble = "";
-	ogl::ProgramWithTime backgroundShader("data/background.glsl");
-	ogl::ProgramWithTime tonemapShader("data/tonemap.glsl");
-	ogl::ProgramWithTime phongShader("data/phong.glsl");
-	ogl::ProgramWithTime textShader("data/text.glsl", "", ogl::ProgramWithTime::HasGS);
-	ogl::ProgramWithTime uiShader("data/ui.glsl", "", ogl::ProgramWithTime::HasGS);
+	std::vector<ogl::ProgramWithTime*> shaders;
+	ogl::ProgramWithTime backgroundShader("data/background.glsl"); shaders.push_back(&backgroundShader);
+	ogl::ProgramWithTime tonemapShader("data/tonemap.glsl"); shaders.push_back(&tonemapShader);
+	ogl::ProgramWithTime phongShader("data/phong.glsl"); shaders.push_back(&phongShader);
+	ogl::ProgramWithTime textShader("data/text.glsl", "", ogl::ProgramWithTime::HasGS); shaders.push_back(&textShader);
+	ogl::ProgramWithTime uiShader("data/ui.glsl", "", ogl::ProgramWithTime::HasGS); shaders.push_back(&uiShader);
 
 	auto maybeReloadKernels = [&]()
 	{
-		backgroundShader.maybeReload();
-		tonemapShader.maybeReload();
-		phongShader.maybeReload();
-		textShader.maybeReload();
-		uiShader.maybeReload();
+		bool updated = false;
+		for (auto&& s : shaders)
+			updated |= s->maybeReload() == 1;
+		return updated;
 	};
 	keyboard.keyEvent[GLFW_KEY_R].pressOnce = [&]() { maybeReloadKernels(); };
 	
@@ -164,7 +166,12 @@ int run()
 		std::ofstream shaderBinFile("shaderBin.txt", std::ios::binary);
 		shaderBinFile.write(shaderBin.data(), shaderBin.size());
 	}
-
+	
+	// camera
+	Camera camera;
+	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.3f) * 10.0f, glm::vec3(), glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
+	
 	// load object
 	auto simpleScene = scene::load_scene(stdx::load_binary_file("data/simple.scene"), scene::io_error_handlers::exception);
 	RenderableMesh simpleMesh(simpleScene.positions, simpleScene.normals, simpleScene.texcoords, simpleScene.indices);
@@ -176,11 +183,6 @@ int run()
 //		envMap = ogl::Texture::create2D(GL_TEXTURE_2D, GL_RGBA16F, image.dim.x, image.dim.y, 0, image.pixels.data(), GL_FLOAT, GL_RGB);
 	}
 
-	// camera
-	Camera camera;
-	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.3f) * 10.0f, glm::vec3(), glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
-	
 	auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
 
 	// quad processing necessities
@@ -194,9 +196,7 @@ int run()
 	
 	// framebuffer setup
 	glm::uvec2 screenDim;
-	ogl::Texture hdrTexture = nullptr;
-	ogl::RenderBuffer depthBuffer = nullptr;
-	ogl::Framebuffer hdrBuffer = nullptr;
+	appx::resource_pool renderTargetPool;
 
 	wnd.resize = [&](unsigned width, unsigned height)
 	{
@@ -208,16 +208,7 @@ int run()
 		glViewport(0, 0, width, height);
 		camera.aspect = (float) width / (float) height;
 		
-		auto newHdrTexture = ogl::Texture::create2D(GL_TEXTURE_2D, GL_RGBA16F, width, height);
-		auto newDepthBuffer = ogl::RenderBuffer::create(GL_DEPTH_COMPONENT, width, height);
-		auto newHdrBuffer = ogl::Framebuffer::create(&newHdrTexture.get(), 1, newDepthBuffer);
-
-		auto paddedWidth = glm::ceil_mul(width, 32U);
-		auto paddedHeight = glm::ceil_mul(height, 32U);
-
-		hdrBuffer = std::move(newHdrBuffer);
-		hdrTexture = std::move(newHdrTexture);
-		depthBuffer = std::move(newDepthBuffer);
+		renderTargetPool.free_unused();
 	};
 	wnd.initialResize();
 
@@ -252,6 +243,22 @@ int run()
 			}
 		}
 	};
+	
+	// Load default preset
+	auto defaultIniFile = "default.ini";
+	try { ui::load_ini_file(defaultIniFile, tweakUi); }
+	catch(...) { appx::print_exception(); }
+
+	// Always store preset on exit
+	struct PresetGuard
+	{
+		stdx::fun_ref<void (ui::UniversalInterface&)> ui;
+
+		~PresetGuard() {
+			try { ui::save_ini_file("lastrun.ini", ui); }
+			catch(...) { appx::print_exception(); }
+		}
+	} presetGuard = { tweakUi };
 
 	// main loop
 	double lastTime = glfwGetTime();
@@ -341,7 +348,11 @@ int run()
 			camConst.FarPlane = camera.farPlane;
 			camConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&camConst, 1));
 		}
-
+		
+		auto hdrTexture = renderTargetPool.acquire( ogl::TextureDesc::make2D(GL_TEXTURE_2D, GL_RGBA16F, screenDim.x, screenDim.y) );
+		auto hdrDepthBuffer = renderTargetPool.acquire( ogl::RenderBufferDesc::make(GL_DEPTH_COMPONENT, screenDim.x, screenDim.y) );
+		auto hdrBuffer = renderTargetPool.acquire( ogl::MakeFramebufferDesc::textures().color(hdrTexture).depthBuffer(hdrDepthBuffer) );
+		
 		// Background
 		{
 			hdrBuffer.bind(GL_FRAMEBUFFER);
@@ -426,6 +437,7 @@ int run()
 				
 				ui.addSlider(&dt, "dt (ms)", dt * 1000.0f, 500.0f, nullptr);
 				tweakUi(ui);
+				ui::preset_user_interface(ui, tweakUi, defaultIniFile);
 				
 				textUi.flushWidgets();
 
@@ -443,10 +455,13 @@ int run()
 
 		{
 			wnd.swapBuffers();
+			
+			renderTargetPool.free_unused_and_next_frame(5);
 
 			// accept input
 			mouse.accept();
 			keyboard.accept();
+			keyboard.inputQueue.clear();
 		}
 		
 		++frameIdx;
