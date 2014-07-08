@@ -170,8 +170,10 @@ int run()
 	// camera
 	Camera camera;
 	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.3f) * 10.0f, glm::vec3(), glm::vec3(0.0f, 1.0f, 0.0f));
+	auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
+
 	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
-	
+
 	// load object
 	Obj simpleObj = parse_object(stdx::load_file("data/simple.obj").c_str());
 	RenderableMesh simpleMesh(simpleObj.v, simpleObj.n, simpleObj.t, simpleObj.f);
@@ -182,8 +184,6 @@ int run()
 //		auto image = img::load_image<float, 3>(stdx::load_binary_file("beach_probe.hdr"));
 //		envMap = ogl::Texture::create2D(GL_TEXTURE_2D, GL_RGBA16F, image.dim.x, image.dim.y, 0, image.pixels.data(), GL_FLOAT, GL_RGB);
 	}
-
-	auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
 
 	// quad processing necessities
 	ogl::NullVertexArray nullVertexArrays;
