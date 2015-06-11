@@ -69,8 +69,8 @@ struct Camera
 		orientation[2] = normalize( orientation[2] );
 	}
 
-	glm::mat4 view() const { return translate(glm::mat4(transpose(orientation)), -pos); }
-	glm::mat4 proj() const { return glm::perspective(fov, aspect, nearPlane, farPlane); }
+	glm::mat4 view() const { return transform(-pos * orientation, glm::vec3(1.0f), transpose(orientation)); }
+	glm::mat4 proj() const { return glm::perspective(glm::radians(fov), aspect, nearPlane, farPlane); }
 	glm::mat4 viewProj() const { return proj() * view(); }
 };
 
@@ -172,7 +172,7 @@ int run()
 	
 	// camera
 	Camera camera;
-	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.3f) * 10.0f, glm::vec3(), glm::vec3(0.0f, 1.0f, 0.0f));
+	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.3f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
 
 	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
@@ -325,10 +325,10 @@ int run()
 		{
 			if (mouse.mouseCaptured)
 			{
-				auto rotationDelta = -90.0f * mouse.relativeMouseDelta(wnd);
+				auto rotationDelta = -0.5f * glm::pi<float>() * mouse.relativeMouseDelta(wnd);
 			
-				camera.orientation = (glm::mat3) glm::rotate(glm::mat4(camera.orientation), rotationDelta.x, glm::vec3(0.0f, 1.0f, 0.0f));
-				camera.orientation = (glm::mat3) glm::rotate(glm::mat4(camera.orientation), rotationDelta.y, glm::vec3(1.0f, 0.0f, 0.0f));
+				camera.orientation = camera.orientation * (glm::mat3) rotate(rotationDelta.x, glm::vec3(0.0f, 1.0f, 0.0f));
+				camera.orientation = camera.orientation * (glm::mat3) rotate(rotationDelta.y, glm::vec3(1.0f, 0.0f, 0.0f));
 				camera.reorientate(glm::vec3(0.0f, 1.0f, 0.0f));
 			}
 
