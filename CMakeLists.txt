@@ -52,6 +52,8 @@ add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC} ${APPLICATION_DATA_STAMP})
 target_link_libraries(${LIGHTER_PROJECT} libglew_static glfw freeimage freetype lighter)
 target_precompiled_header(${LIGHTER_PROJECT} pch.h pch.cpp)
 
+configure_file(add/make/cmake/application.vcxproj.user-template ${LIGHTER_PROJECT}.vcxproj.user @ONLY)
+
 #--------------------------------------------------------------------
 # Install files other than the application
 #--------------------------------------------------------------------
