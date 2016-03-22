@@ -10,7 +10,7 @@
 	ignore = dirty
 	path = add/external/glew
 	url = https://github.com/Perlmint/glew-cmake
-[submodule "FreeImage"]
+[submodule "freeimage"]
 	ignore = dirty
 	path = add/external/freeimage
 	url = https://github.com/tszirr/freeimage
