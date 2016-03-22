@@ -1,0 +1,24 @@
+[submodule "lighter-make"]
+	path = add/make
+	url = https://bitbucket.org/tszirr/lighter-make
+	ignore = dirty
+[submodule "glfw"]
+	path = add/external/glfw
+	url = https://github.com/glfw/glfw
+	ignore = dirty
+[submodule "glew"]
+	ignore = dirty
+	path = add/external/glew
+	url = https://github.com/Perlmint/glew-cmake
+[submodule "FreeImage"]
+	ignore = dirty
+	path = add/external/FreeImage
+	url = https://github.com/tszirr/freeimage
+[submodule "freetype"]
+	path = add/external/freetype
+	url = http://git.savannah.gnu.org/cgit/freetype/freetype2.git
+	ignore = dirty
+[submodule "lighter"]
+	path = add/lighter
+	url = https://bitbucket.org/tszirr/lighter-git
+	ignore = dirty
