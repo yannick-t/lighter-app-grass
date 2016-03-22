@@ -12,7 +12,7 @@
 	url = https://github.com/Perlmint/glew-cmake
 [submodule "FreeImage"]
 	ignore = dirty
-	path = add/external/FreeImage
+	path = add/external/freeimage
 	url = https://github.com/tszirr/freeimage
 [submodule "freetype"]
 	path = add/external/freetype

@@ -1,4 +1,8 @@
+cmake_minimum_required(VERSION 3.0.0)
+set(LIGHTER_PROJECT riseandshine)
 project(${LIGHTER_PROJECT})
+
+add_subdirectory("add/make")
 
 #--------------------------------------------------------------------
 # Data
@@ -44,7 +48,8 @@ add_custom_command(OUTPUT ${APPLICATION_DATA_STAMP}
     DEPENDS ${APPLICATION_SHADER_SRC} ${APPLICATION_DATA} ${LIGHTER_DATA_STAMP})
 
 add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC} ${APPLICATION_DATA_STAMP})
-add_lighter_dependencies(${LIGHTER_PROJECT})
+#add_lighter_dependencies(${LIGHTER_PROJECT})
+target_link_libraries(${LIGHTER_PROJECT} libglew_static glfw freeimage freetype lighter)
 target_precompiled_header(${LIGHTER_PROJECT} pch.h pch.cpp)
 
 #--------------------------------------------------------------------
