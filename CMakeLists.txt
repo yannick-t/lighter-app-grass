@@ -2,9 +2,7 @@ cmake_minimum_required(VERSION 3.0.0)
 set(LIGHTER_PROJECT riseandshine)
 project(${LIGHTER_PROJECT})
 
-include("add/make/global-flags.cmake")
-add_subdirectory("add/make")
-include("add/make/global-flags-internal.cmake")
+include(add/make/everything.cmake)
 
 #--------------------------------------------------------------------
 # Data

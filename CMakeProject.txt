@@ -1,2 +1,0 @@
-set(LIGHTER_PROJECT riseandshine)
-set(LIGHTER_INSTALL_DATA_DIRECTORY bin/data)
