@@ -49,7 +49,7 @@ add_custom_command(OUTPUT ${APPLICATION_DATA_STAMP}
 
 add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC} ${APPLICATION_DATA_STAMP})
 #add_lighter_dependencies(${LIGHTER_PROJECT})
-target_link_libraries(${LIGHTER_PROJECT} libglew_static glfw freeimage freetype lighter)
+target_link_libraries(${LIGHTER_PROJECT} libglew_static glfw lighter)
 target_precompiled_header(${LIGHTER_PROJECT} pch.h pch.cpp)
 
 configure_file(add/make/cmake/application.vcxproj.user-template ${LIGHTER_PROJECT}.vcxproj.user @ONLY)
