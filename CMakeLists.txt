@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.0.0)
-set(LIGHTER_PROJECT riseandshine)
-project(${LIGHTER_PROJECT})
+project(riseandshine)
 
 include(add/make/everything.cmake)
 
@@ -47,20 +46,20 @@ add_custom_command(OUTPUT ${APPLICATION_DATA_STAMP}
     COMMAND ${CMAKE_COMMAND} -E touch \"${APPLICATION_DATA_STAMP}\"
     DEPENDS ${APPLICATION_SHADER_SRC} ${APPLICATION_DATA} ${LIGHTER_DATA_STAMP})
 
-add_executable(${LIGHTER_PROJECT} ${APPLICATION_SRC} ${APPLICATION_DATA_STAMP})
-#add_lighter_dependencies(${LIGHTER_PROJECT})
-target_link_libraries(${LIGHTER_PROJECT} libglew_static glfw lighter)
-target_precompiled_header(${LIGHTER_PROJECT} pch.h pch.cpp)
+add_executable(${PROJECT_NAME} ${APPLICATION_SRC} ${APPLICATION_DATA_STAMP})
+#add_lighter_dependencies(${PROJECT_NAME})
+target_link_libraries(${PROJECT_NAME} libglew_static glfw lighter)
+target_precompiled_header(${PROJECT_NAME} pch.h pch.cpp)
 
-configure_file(add/make/cmake/application.vcxproj.user-template ${LIGHTER_PROJECT}.vcxproj.user @ONLY)
+configure_file(add/make/cmake/application.vcxproj.user-template ${PROJECT_NAME}.vcxproj.user @ONLY)
 
 #--------------------------------------------------------------------
 # Install files other than the application
 #--------------------------------------------------------------------
 if (LIGHTER_INSTALL)
-    install (TARGETS ${LIGHTER_PROJECT} DESTINATION bin)
+    install (TARGETS ${PROJECT_NAME} DESTINATION bin)
     install (FILES ${APPLICATION_SYSTEM_SRC} DESTINATION bin)
     install (FILES ${APPLICATION_SHADER_SRC} ${APPLICATION_DATA} DESTINATION ${LIGHTER_INSTALL_DATA_DIRECTORY})
 	
-    add_custom_command(TARGET ${LIGHTER_PROJECT} POST_BUILD COMMAND ${LIGHTER_INSTALL_COMMAND})
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND ${LIGHTER_INSTALL_COMMAND})
 endif()

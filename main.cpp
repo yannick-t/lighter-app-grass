@@ -190,7 +190,7 @@ int run()
 		simpleScene = std::move(newScene);
 		currentSceneFile = stdx::filesys_relative_path(".", file);
 	};
-	loadScene("data/simple.scene");
+	loadScene("data/simple.obj");
 
 	auto sceneUi = [&](ui::UniversalInterface& ui)
 	{

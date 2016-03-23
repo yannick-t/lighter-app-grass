@@ -22,3 +22,12 @@
 	path = add/lighter
 	url = https://bitbucket.org/tszirr/lighter-git
 	ignore = dirty
+[submodule "scenecvt"]
+	ignore = dirty
+	fetchRecurseSubmodules = false
+	path = add/scenecvt
+	url = https://bitbucket.org/tszirr/scenecvt-git
+[submodule "assimp"]
+	path = add/external/assimp
+	url = https://github.com/assimp/assimp
+	ignore = dirty
