@@ -18,7 +18,7 @@
 #include <fstream>
 
 #include "img"
-#include "scenex"
+#include "obj.h"
 
 #include "text"
 #include "ui"
@@ -76,15 +76,12 @@ struct Camera
 
 struct RenderableMesh
 {
-	MOVE_GENERATE(RenderableMesh, MOVE_5, MEMBER, vertices, MEMBER, positions, MEMBER, normals, MEMBER, texCoords, MEMBER, indices)
-
 	ogl::VertexArrays vertices;
 	ogl::Buffer positions;
 	ogl::Buffer normals;
 	ogl::Buffer texCoords;
 	ogl::Buffer indices;
 
-	RenderableMesh(nullptr_t = nullptr) { }
 	template <class V, class N, class T, class I>
 	RenderableMesh(V const& vposRange, N const& vnrmRange, T const& vtexRange, I const& idcsRange)
 		: vertices(ogl::VertexArrays::create())
@@ -178,34 +175,9 @@ int run()
 	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
 
 	// load object
-	scene::Scene simpleScene;
-	RenderableMesh simpleMesh;
-	std::string currentSceneFile;
-	auto&& loadScene = [&](char const* file)
-	{
-		auto convertedFile = scene::scenecvt().locateOrRun(file);
-		auto newScene = scene::load_scene(stdx::load_binary_file(convertedFile.c_str()), scene::io_error_handlers::exception);
-		simpleMesh = RenderableMesh(newScene.positions, newScene.normals, newScene.texcoords, newScene.indices);
-		// only change when full construction succeeded
-		simpleScene = std::move(newScene);
-		currentSceneFile = stdx::filesys_relative_path(".", file);
-	};
-	loadScene("data/simple.obj");
-
-	auto sceneUi = [&](ui::UniversalInterface& ui)
-	{
-		if (auto uiGroup = ui::Group(ui, &simpleMesh))
-		{
-			ui.addText(nullptr, "Scene", "", nullptr);
-
-			ui.addButton(&loadScene, (currentSceneFile.empty()) ? "load" : currentSceneFile.c_str(), appx::wrap_noexcept([&](){
-				auto files = stdx::prompt_file(nullptr, "*.scene|*.*", stdx::dialog::open);
-				if (!files.empty()) loadScene(files.front().c_str());
-			}));
-			ui.addHidden(&currentSceneFile, "load", currentSceneFile.c_str(), [&](char const* file) { loadScene(file); });
-		}
-	};
-
+	Obj simpleObj = parse_object(stdx::load_file("data/simple.obj").c_str());
+	RenderableMesh simpleMesh(simpleObj.v, simpleObj.n, simpleObj.t, simpleObj.f);
+	
 	// load environment map
 	ogl::Texture envMap = nullptr;
 	{
@@ -270,8 +242,6 @@ int run()
 				ui.addInteractiveButton(4, "test button", true, nullptr);
 			}
 		}
-
-		sceneUi(ui);
 	};
 	
 	// Load default preset
@@ -405,7 +375,7 @@ int run()
 
 			simpleMesh.bind();
 			phongShader.bind();
-			simpleMesh.draw(GL_TRIANGLES, 0, (unsigned) simpleScene.indices.size());
+			simpleMesh.draw(GL_TRIANGLES, 0, (unsigned) simpleObj.f.size() * 3);
 		}
 		
 		// Blit / tonemap
