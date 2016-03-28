@@ -1,6 +1,6 @@
 [submodule "lighter-make"]
 	path = add/make
-	url = https://bitbucket.org/tszirr/lighter-make
+	url = https://github.com/tszirr/lighter-make
 	ignore = dirty
 [submodule "glfw"]
 	path = add/external/glfw
@@ -20,5 +20,5 @@
 	ignore = dirty
 [submodule "lighter"]
 	path = add/lighter
-	url = https://bitbucket.org/tszirr/lighter-git
+	url = https://github.com/tszirr/lighter
 	ignore = dirty
