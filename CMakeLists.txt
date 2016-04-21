@@ -48,7 +48,7 @@ add_custom_command(OUTPUT ${APPLICATION_DATA_STAMP}
 
 add_executable(${PROJECT_NAME} ${APPLICATION_SRC} ${APPLICATION_DATA_STAMP})
 #add_lighter_dependencies(${PROJECT_NAME})
-target_link_libraries(${PROJECT_NAME} lighter)
+target_link_libraries(${PROJECT_NAME} lighter ${LIGHTER_MAKE_DEFAULT_LIBS})
 target_precompiled_header(${PROJECT_NAME} pch.h pch.cpp)
 
 configure_file(add/make/cmake/application.vcxproj.user-template ${PROJECT_NAME}.vcxproj.user @ONLY)
