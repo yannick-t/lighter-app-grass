@@ -176,6 +176,8 @@ int run()
 	auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
 
 	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
+	glm::vec4 lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	auto lightConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::LightConstants));
 
 	// load object
 	scene::Scene simpleScene;
@@ -190,21 +192,7 @@ int run()
 		simpleScene = std::move(newScene);
 		currentSceneFile = stdx::filesys_relative_path(".", file);
 	};
-	loadScene("data/simple.obj");
-
-	auto sceneUi = [&](ui::UniversalInterface& ui)
-	{
-		if (auto uiGroup = ui::Group(ui, &simpleMesh))
-		{
-			ui.addText(nullptr, "Scene", "", nullptr);
-
-			ui.addButton(&loadScene, (currentSceneFile.empty()) ? "load" : currentSceneFile.c_str(), appx::wrap_noexcept([&](){
-				auto files = stdx::prompt_file(nullptr, "*.scene|*.*", stdx::dialog::open);
-				if (!files.empty()) loadScene(files.front().c_str());
-			}));
-			ui.addHidden(&currentSceneFile, "load", currentSceneFile.c_str(), [&](char const* file) { loadScene(file); });
-		}
-	};
+	loadScene("data/simpler.obj");
 
 	// load environment map
 	ogl::Texture envMap = nullptr;
@@ -260,18 +248,14 @@ int run()
 		if (auto uiGroup = ui::Group(ui, nullptr))
 		{
 			ui.addText(nullptr, "Tweak", "", nullptr);
-			ui.addText(nullptr, "test str", testString.c_str(), testString);
-			ui.addSlider(&lightDirection, "light dir", 0.1f, 6.0f, nullptr);
 			ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
 
 //			if (auto uiUnion = ui::Union(ui))
 			{
-				ui.addButton(3, "test button", nullptr);
-				ui.addInteractiveButton(4, "test button", true, nullptr);
+				// ui.addButton(3, "test button", nullptr);
+				// ui.addInteractiveButton(4, "test button", true, nullptr);
 			}
 		}
-
-		sceneUi(ui);
 	};
 	
 	// Load default preset
@@ -296,6 +280,7 @@ int run()
 	unsigned frameIdx = 0;
 	float smoothDt = 1.0f;
 	float smoothFDt = 1.0f;
+	float fps = 0;
 
 	while (!wnd.shouldClose())
 	{
@@ -378,6 +363,14 @@ int run()
 			camConst.FarPlane = camera.farPlane;
 			camConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&camConst, 1));
 		}
+
+		glsl::LightConstants lightConst;
+
+		{
+			lightConst.Direction = lightDirection;
+			lightConst.Color = lightColor;
+			lightConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&lightConst, 1));
+		}
 		
 		auto hdrTexture = renderTargetPool.acquire( ogl::TextureDesc::make2D(GL_TEXTURE_2D, GL_RGBA16F, screenDim.x, screenDim.y) );
 		auto hdrDepthBuffer = renderTargetPool.acquire( ogl::RenderBufferDesc::make(GL_DEPTH_COMPONENT, screenDim.x, screenDim.y) );
@@ -402,6 +395,7 @@ int run()
 
 			glEnable(GL_DEPTH_TEST);
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
+			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
 
 			simpleMesh.bind();
 			phongShader.bind();
@@ -466,8 +460,11 @@ int run()
 				glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 				
 				ui.addSlider(&dt, "dt (ms)", dt * 1000.0f, 500.0f, nullptr);
+				char fpsString[20];
+				_snprintf(fpsString, 20, "%f FPS", fps);
+				ui.addText(nullptr, fpsString, "", nullptr);
 				tweakUi(ui);
-				ui::preset_user_interface(ui, tweakUi, defaultIniFile);
+				// ui::preset_user_interface(ui, tweakUi, defaultIniFile);
 				
 				textUi.flushWidgets();
 
@@ -506,8 +503,9 @@ int run()
 		else
 			smoothFDt = smoothDt;
 
-		if (frameIdx % 30 == 0)
+		if (frameIdx % 15 == 0)
 		{
+			fps = 1.0f / smoothFDt;
 			std::cout << "Frame time: " << 1000.0f * smoothFDt << " ms; " << 1.0f / smoothFDt << " FPS" << std::endl;
 		}
 

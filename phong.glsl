@@ -1,4 +1,4 @@
-#version 330 core
+#version 440 core
 
 #include <renderer.glsl.h>
 
@@ -6,6 +6,12 @@ layout(std140) uniform Camera
 {
 	CameraConstants camera;
 };
+
+layout(std140, binding = 1) uniform Light
+{
+	LightConstants light;
+};
+
 
 #ifdef VERTEX_OUT
 out VertexData
@@ -98,10 +104,18 @@ layout(location = 0) out vec4 color0;
 
 void main()
 {
+	
+	// (very) Simple Shading
+	vec3 normal = normalize(vin.worldNormal);
+	float factor = max(-dot(normalize(light.Direction), normal), 0.0);
+	color0 = vec4((factor * light.Color));
+
+	/*
 	vec3 normal = normalize(vin.worldNormal);
 	vec3 color = 0.5 + 0.5 * normal;
 	color *= clamp(0.2f + 0.8 * normal.y, 0.f, 1.f);
 	color0 = vec4(color, 1.0);
+	*/
 }
 
 #endif

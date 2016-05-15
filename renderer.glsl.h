@@ -24,3 +24,9 @@ struct CameraConstants
 	float NearPlane;
 	float FarPlane;
 };
+
+struct LightConstants
+{
+	vec3 Direction;
+	vec4 Color;
+};

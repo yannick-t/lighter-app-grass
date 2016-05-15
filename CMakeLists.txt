@@ -21,6 +21,7 @@ set(APPLICATION_SHADER_SRC
   background.glsl
   tonemap.glsl
   phong.glsl
+  referenceGeometryGrass.glsl
   )
 set(APPLICATION_CODE
   main.cpp
