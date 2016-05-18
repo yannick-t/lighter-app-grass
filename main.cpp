@@ -150,7 +150,7 @@ int run()
 	std::vector<ogl::ProgramWithTime*> shaders;
 	ogl::ProgramWithTime backgroundShader("data/background.glsl"); shaders.push_back(&backgroundShader);
 	ogl::ProgramWithTime tonemapShader("data/tonemap.glsl"); shaders.push_back(&tonemapShader);
-	ogl::ProgramWithTime phongShader("data/phong.glsl"); shaders.push_back(&phongShader);
+	ogl::ProgramWithTime geometryGrassShader("data/referenceGeometryGrass.glsl", "", ogl::ProgramWithTime::HasHS | ogl::ProgramWithTime::HasDS); shaders.push_back(&geometryGrassShader);
 	ogl::ProgramWithTime textShader("data/text.glsl", "", ogl::ProgramWithTime::HasGS); shaders.push_back(&textShader);
 	ogl::ProgramWithTime uiShader("data/ui.glsl", "", ogl::ProgramWithTime::HasGS); shaders.push_back(&uiShader);
 
@@ -178,21 +178,6 @@ int run()
 	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
 	glm::vec4 lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 	auto lightConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::LightConstants));
-
-	// load object
-	scene::Scene simpleScene;
-	RenderableMesh simpleMesh;
-	std::string currentSceneFile;
-	auto&& loadScene = [&](char const* file)
-	{
-		auto convertedFile = scene::scenecvt().locateOrRun(file);
-		auto newScene = scene::load_scene(stdx::load_binary_file(convertedFile.c_str()), scene::io_error_handlers::exception);
-		simpleMesh = RenderableMesh(newScene.positions, newScene.normals, newScene.texcoords, newScene.indices);
-		// only change when full construction succeeded
-		simpleScene = std::move(newScene);
-		currentSceneFile = stdx::filesys_relative_path(".", file);
-	};
-	loadScene("data/simpler.obj");
 
 	// load environment map
 	ogl::Texture envMap = nullptr;
@@ -236,11 +221,12 @@ int run()
 	keyboard.keyEvent[GLFW_KEY_F].pressOnce = [&]() { fast = !fast; };
 
 	bool enableUi = true;
-	keyboard.keyEvent[GLFW_KEY_U].pressOnce = [&]() { enableUi = !enableUi; };
+	keyboard.keyEvent[GLFW_KEY_U].pressOnce = [&]() { enableUi = !enableUi; }; 
 	
 	float camSpeed = 1.0f;
+	float bladeCount = 1; 
 
-	std::string testString = "test str";
+	std::string testString = "test str"; 
 
 	// test ui
 	auto&& tweakUi = [&](ui::UniversalInterface& ui)
@@ -249,8 +235,8 @@ int run()
 		{
 			ui.addText(nullptr, "Tweak", "", nullptr);
 			ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
-
-//			if (auto uiUnion = ui::Union(ui))
+			ui.addSlider(&bladeCount, "grass blades", bladeCount, 1000000, bladeCount, 1);
+//			if (auto uiUnion = ui::Union(ui)) 
 			{
 				// ui.addButton(3, "test button", nullptr);
 				// ui.addInteractiveButton(4, "test button", true, nullptr);
@@ -387,19 +373,19 @@ int run()
 			nullVertexArrays.bind();
 			backgroundShader.bind();
 			glDrawArrays(GL_TRIANGLES, 0, 3);
-		}
-
-		// Test scene
+		} 
+		 
+		// Reference Geometry Grass
 		{
 			hdrBuffer.bind(GL_FRAMEBUFFER);
 
 			glEnable(GL_DEPTH_TEST);
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
 			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
-
-			simpleMesh.bind();
-			phongShader.bind();
-			simpleMesh.draw(GL_TRIANGLES, 0, (unsigned) simpleScene.indices.size());
+			nullVertexArrays.bind();
+			geometryGrassShader.bind();
+			glPatchParameteri(GL_PATCH_VERTICES, 1); // 1 Vertex per Patch 
+			glDrawArrays(GL_PATCHES, 0, bladeCount); // Draw vertices, shader will create grass blades for each one with random positions
 		}
 		
 		// Blit / tonemap

@@ -16,6 +16,7 @@ set(APPLICATION_DATA
 #--------------------------------------------------------------------
 set(APPLICATION_SYSTEM_SRC
   renderer.glsl.h
+  random.glsl.h
   )
 set(APPLICATION_SHADER_SRC
   background.glsl
