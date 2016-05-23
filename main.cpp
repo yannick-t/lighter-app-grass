@@ -223,7 +223,7 @@ int run()
 	bool enableUi = true;
 	keyboard.keyEvent[GLFW_KEY_U].pressOnce = [&]() { enableUi = !enableUi; }; 
 	
-	float camSpeed = 1.0f;
+	float camSpeed = 1.0f; 
 	float bladeCount = 1; 
 
 	std::string testString = "test str"; 

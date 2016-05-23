@@ -35,11 +35,16 @@ in VertexData
 
 layout(location = 0) in vec3 pos;
 layout(location = 1) in vec3 normal;
-out vec3[3] cPs;
-out float baseWidth;
+out vec3[3] controlPoints;
+out vec3[4] quadVertices;
+out mat4 perBladeRotation; // Random Rotation
+out vec3 bladePosition;
 
 void main()
 {
+	// For each input vertex create a grass blade, later refined via tessellation
+	// Input vertex position is discarded if it exists, it will get a random position in the grass patch
+
 	// Todo: Sliders for (some of these) input values
 	// Patch
 	float patchSizeX = 40;
@@ -61,31 +66,35 @@ void main()
 	// Top of the blade X variation
 	float maxPointVariationX = 0.5;
 
-	float maxBaseWidth = 0.4;
-	float minBaseWidth = 0.1;
+	float maxBaseWidth = 0.1;
+	float minBaseWidth = 0.01;
+	float maxBaseWidthDeviationFactor = 1;
 
 
 
-	vec3 position;
 	RandState rng = rand_init(gl_VertexID, 11); 
 
 	// Randomize position
-	position.x = patchSizeX * rand_next(rng);
-	position.z = patchSizeZ * rand_next(rng);
-	position.y = 0.0;
+	bladePosition.x = patchSizeX * rand_next(rng);
+	bladePosition.z = patchSizeZ * rand_next(rng);
+	bladePosition.y = 0.0;
 
-	gl_Position = vec4(position, 1.0);
-	vout.worldPos = position;
+	gl_Position = vec4(bladePosition, 1.0);
+	vout.worldPos = bladePosition;
+
 
 	// Randomize height, shape
 	float height = minHeight + rand_next(rng) * (maxHeight - minHeight);
-	float influenceX = 2 * (rand_next(rng) - 0.5) * maxInfluencePointVariationX;
+
+	float pointX = rand_next(rng) * maxPointVariationX;
+
+	float influenceX = rand_next(rng) * maxInfluencePointVariationX;
 	float influenceY = (height / 2) + 2 * (rand_next(rng) - 0.5) * maxInfluencePointVariationY;
 
-	float pointX = 2 * (rand_next(rng) - 0.5) * maxPointVariationX;
+	
 
 	// Control Points for a curve charaterizing a grass blade
-	const vec3 controlPoints[3] = vec3[3]
+	controlPoints = vec3[3]
 		(
 		vec3(0.0, 0.0, 0.0),
 		vec3(influenceX, influenceY, 0.0),
@@ -94,30 +103,37 @@ void main()
 
 	// Randomize rotation
 	float angleX = 2 * rotLimitFactorX * rand_next(rng) * PI;
-	mat3 rotationX = mat3(1.0, 0.0,		    0.0,
-						  0.0, cos(angleX), -sin(angleX),
-						  0.0, sin(angleX), cos(angleX));
+	mat4 rotationX = mat4(1.0, 0.0,		    0.0,		 0.0,
+						  0.0, cos(angleX), -sin(angleX),0.0,
+						  0.0, sin(angleX), cos(angleX), 0.0,
+						  0.0, 0.0,         0.0,         1.0);
 
 	float angleY = 2 * rotLimitFactorY * rand_next(rng) * PI;
-	mat3 rotationY = mat3(cos(angleY),  0.0, sin(angleY),
-					      0.0,			1.0, 0.0,
-		                  -sin(angleY), 0.0, cos(angleY));
+	mat4 rotationY = mat4(cos(angleY),  0.0, sin(angleY), 0.0,
+					      0.0,			1.0, 0.0,         0.0,
+						  -sin(angleY), 0.0, cos(angleY), 0.0,
+						  0.0,          0.0, 0.0,         1.0);
 
 	float angleZ = 2 * rotLimitFactorZ * rand_next(rng) * PI;
-	mat3 rotationZ = mat3(cos(angleZ),  -sin(angleZ), 0.0,
-						  sin(angleZ),	cos(angleZ), 0.0,
-						  0.0,			0.0,		1.0);
+	mat4 rotationZ = mat4(cos(angleZ),  -sin(angleZ), 0.0,0.0,
+						  sin(angleZ),	cos(angleZ),  0.0,0.0,
+						  0.0,			0.0,		  1.0,0.0,
+						  0.0,          0.0,          0.0,1.0);
 
 	// Randomize (base) width
-	baseWidth = minBaseWidth + rand_next(rng) * (maxBaseWidth - minBaseWidth);
+	float baseWidth = minBaseWidth + rand_next(rng) * (maxBaseWidth - minBaseWidth);
+	float baseWidthTopDeviation = baseWidth * (rand_next(rng) * maxBaseWidthDeviationFactor);
 
-	// "real" position of control points
-	for (int i = 0; i < 3; i++) {
-		cPs[i] = position + rotationX * rotationY * rotationZ * controlPoints[i];
-	}
+	// Calculate the position of the vertices of the quad to be tessellated representing the grass blade
+	// Place vertices in in such a way that it has the basic shape of the grass blade characterized by the curve
+	quadVertices[0] = controlPoints[0] + vec3(-baseWidth/2, 0.0, 0.0);
+	quadVertices[1] = controlPoints[2] + vec3(-baseWidth/2 + baseWidthTopDeviation, 0.0, 0.0);
+	quadVertices[2] = controlPoints[2] + vec3(baseWidth/2 - baseWidthTopDeviation, 0.0, 0.0); // Todo: A bit higher than other top vertex
+	quadVertices[3] = controlPoints[0] + vec3(baseWidth/2, 0.0, 0.0);
 
-	// Normal in relation to control points
-	vout.worldNormal = normalize(cross((cPs[1] - cPs[0]), (cPs[2] - cPs[0])));
+
+	// transformation matrix for the blade
+	perBladeRotation = rotationX * rotationY * rotationZ;
 }
 
 #endif
@@ -125,38 +141,46 @@ void main()
 // Tessellation Control Shader
 #ifdef IN_TCS
 
-layout(vertices = 3) out;
-in vec3[][3] cPs;
-in float baseWidth[];
+layout(vertices = 4) out;
+in vec3[][3] controlPoints;
+in vec3[][4] quadVertices;
+in mat4[] perBladeRotation;
+in vec3[] bladePosition;
+out vec3[] tcPosition;
 patch out vec3 influencePoint;
+patch out mat4 tcPerBladeRotation;
+patch out vec3 tcBladePosition;
 
 #define ID gl_InvocationID
 
 void main() {
 	if (ID == 0) {
-
-		influencePoint = cPs[0][1];
+		influencePoint = controlPoints[0][1];
+		tcPerBladeRotation = perBladeRotation[0];
+		tcBladePosition = bladePosition[0];
 
 		// LOD
 		float maxDist = 10;
 		float minLod = 2;
-		float maxLod = 10;
-		float lod = minLod + (1 - length(camera.CamPos - cPs[0][0])/maxDist) * (maxLod - minLod);
+		float maxLod = 15;
+		float lod = minLod + (1 - length(camera.CamPos - bladePosition[0])/maxDist) * (maxLod - minLod);
 		if(lod < minLod) {
 			lod = minLod;
 		}
-		gl_TessLevelInner[0] = 1;
-		gl_TessLevelOuter[0] = lod;
-		gl_TessLevelOuter[1] = lod;
-		gl_TessLevelOuter[2] = 1;
 
-		// Place vertices in in such a way that it has the basic shape of the grass blade characterized by the curve 
-		gl_out[ID].gl_Position = vec4(cPs[0][0],0.0) + vec4(-baseWidth[0]/2, 0.0, 0.0, 0.0);
-	} else if (ID == 1) {
-		gl_out[ID].gl_Position = vec4(cPs[0][0],0.0) + vec4(baseWidth[0]/2, 0.0, 0.0, 0.0);
-	} else {
-		gl_out[ID].gl_Position = vec4(cPs[0][2],0.0);
+		gl_TessLevelInner[0] = 1;
+		gl_TessLevelInner[0] = 1;
+
+		gl_TessLevelOuter[0] = lod;
+		gl_TessLevelOuter[1] = 1;
+		gl_TessLevelOuter[2] = lod;
+		gl_TessLevelOuter[3] = 1;
+
+		// Todo: Curve grass blades
 	}
+
+	gl_out[ID].gl_Position = vec4(bladePosition[0], 0.0) + perBladeRotation[0] * vec4(quadVertices[0][ID], 1.0);
+	tcPosition[ID] = quadVertices[0][ID];
 }
 
 #endif
@@ -164,31 +188,23 @@ void main() {
 // Tessellation Evaluation Shader
 #ifdef IN_TES
 
-layout(triangles, equal_spacing, cw) in;
+layout(quads, equal_spacing, cw) in;
+in vec3 tcPosition[];
 patch in vec3 influencePoint;
+patch in vec3 tcBladePosition;
+patch in mat4 tcPerBladeRotation;
 out vec3 normal;
 
 void main() {
-	vec3 pos = vec3(
-		gl_TessCoord[0] * gl_in[0].gl_Position +
-		gl_TessCoord[1] * gl_in[1].gl_Position +
-		gl_TessCoord[2] * gl_in[2].gl_Position);
+	// Curves for left and right edge of the blade (quadratic bezier)
+	vec3 influencePointL= influencePoint + (tcPosition[0] - tcPosition[3]);
+	vec3 l = pow(1 - gl_TessCoord.y, 2) * tcPosition[0] + 2 * (1 - gl_TessCoord.y) * gl_TessCoord.y * influencePointL + pow(gl_TessCoord.y, 2) * tcPosition[1];
+	vec3 r = pow(1 - gl_TessCoord.y, 2) * tcPosition[3] + 2 * (1 - gl_TessCoord.y) * gl_TessCoord.y * influencePoint + pow(gl_TessCoord.y, 2) * tcPosition[2];
+	vec3 pos = mix(l, r, gl_TessCoord.x);
 
-	// Modify position with the curve
-	vec3 iP_Pos = influencePoint - pos;
-	float dist = length(iP_Pos);
-	float maxDist = min(min(
-		length(vec3(gl_in[0].gl_Position) - influencePoint), 
-		length(vec3(gl_in[1].gl_Position) - influencePoint)),
-		length(vec3(gl_in[2].gl_Position) - influencePoint));
-	float factor = (1 - dist / maxDist);
-	vec3 curvePos = pos;
-	if(factor > 0)	{
-		curvePos = pos + factor * iP_Pos;
-	}
-
-	gl_Position = camera.ViewProj * vec4(curvePos, 1.0);
+	gl_Position = camera.ViewProj * (vec4(tcBladePosition, 1.0) + tcPerBladeRotation * vec4(pos, 1.0));
 	normal = normalize(cross(vec3(gl_in[1].gl_Position - gl_in[0].gl_Position), vec3(gl_in[2].gl_Position - gl_in[0].gl_Position)));
+	// Todo: Better normals (+ correct transformation?)
 }
 
 #endif
