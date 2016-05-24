@@ -30,3 +30,9 @@ struct LightConstants
 	vec3 Direction;
 	vec4 Color;
 };
+
+struct GrassPatchConstants
+{
+	vec3 Position;
+	float Size;
+};

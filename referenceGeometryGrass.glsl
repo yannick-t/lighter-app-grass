@@ -13,6 +13,11 @@ layout(std140, binding = 1) uniform Light
 	LightConstants light;
 };
 
+layout(std140, binding = 2) uniform GrassPatch
+{
+	GrassPatchConstants grassPatch;
+};
+
 #define PI 3.1415926535897932384626433832795
 
 #ifdef VERTEX_OUT
@@ -45,8 +50,8 @@ void main()
 
 	// Todo: Sliders for (some of these) input values
 	// Patch
-	float patchSizeX = 40;
-	float patchSizeZ = 40;
+	float patchSizeX = grassPatch.Size;
+	float patchSizeZ = grassPatch.Size;
 
 	// Grass blade
 	float minHeight = 0.2;
@@ -77,6 +82,8 @@ void main()
 	bladePosition.x = patchSizeX * rand_next(rng);
 	bladePosition.z = patchSizeZ * rand_next(rng);
 	bladePosition.y = 0.0;
+
+	bladePosition = grassPatch.Position + bladePosition;
 
 	gl_Position = vec4(bladePosition, 1.0);
 	vout.worldPos = bladePosition;
@@ -196,8 +203,8 @@ void main() {
 	vec3 pos = mix(l, r, gl_TessCoord.x);
 
 	gl_Position = camera.ViewProj * vec4(pos, 1.0);
-	normal = normalize(cross(vec3(gl_in[1].gl_Position - gl_in[0].gl_Position), vec3(gl_in[2].gl_Position - gl_in[0].gl_Position)));
-	// Todo: Better normals (+ correct transformation?)
+	normal = (transpose(camera.ViewProjInv) * vec4(normalize(cross(vec3(gl_in[1].gl_Position - gl_in[0].gl_Position), vec3(gl_in[2].gl_Position - gl_in[0].gl_Position))), 0.0)).xyz;
+	// Todo: Better normals
 }
 
 #endif
@@ -214,9 +221,10 @@ void main()
 	vec4 green = vec4(0.1, 0.4, 0.1, 1.0);
 
 	// (very) Simple Shading
-	float factor = max(-dot(normalize(light.Direction), normal), 0.0);
-	color0 = vec4((factor * (0.9 * green + 0.1 * light.Color)));
-	
+	float factor = min(max(-dot(normalize(light.Direction), normal), 0.1), 1.0);
+	color0 = vec4(factor * green);
+
+	// Todo: Better shader
 	
 }
 

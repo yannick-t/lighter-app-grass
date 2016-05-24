@@ -12,6 +12,7 @@
 #include "pool"
 
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,17 @@ struct Camera
 	float nearPlane;
 	float farPlane;
 
+	float hNear;
+	float wNear;
+	float hFar;
+	float wFar;
+
+	glm::vec3 nearPoints[4];
+	glm::vec3 farPoints[4];
+
+	glm::vec3 max;
+	glm::vec3 min;
+
 	Camera()
 		: fov(90.0f)
 		, aspect(1.0f)
@@ -62,11 +74,83 @@ struct Camera
 		reorientate(up);
 	}
 
-	void reorientate(glm::vec3 const& up)
-	{
-		orientation[0] = normalize( cross(up, orientation[2]) );
-		orientation[1] = normalize( cross(orientation[2], orientation[0]) );
-		orientation[2] = normalize( orientation[2] );
+	void reorientate(glm::vec3 const& up) {
+		orientation[0] = normalize(cross(up, orientation[2]));
+		orientation[1] = normalize(cross(orientation[2], orientation[0]));
+		orientation[2] = normalize(orientation[2]);
+
+		// Todo: maybe optimize
+		float hNear = 2 * tan(fov / 2) * nearPlane;
+		float wNear = hNear * aspect;
+
+		float hFar = 2 * tan(fov / 2) * farPlane;
+		float wFar = hFar * aspect;
+
+		glm::vec3 nc = pos + orientation[2] * nearPlane;
+		nearPoints[0] = nc + (up * hNear / 2) - (orientation[0] * wNear / 2); // top left
+		nearPoints[1] = nc + (up * hNear / 2) + (orientation[0] * wNear / 2); // top right
+		nearPoints[2] = nc - (up * hNear / 2) - (orientation[0] * wNear / 2); // bottom left
+		nearPoints[3] = nc - (up * hNear / 2) + (orientation[0] * wNear / 2); // bottom right
+
+		glm::vec3 fc = pos + orientation[2] * farPlane;
+		farPoints[0] = fc + (up * hFar / 2) - (orientation[0] * wFar / 2); // ...
+		farPoints[1] = fc + (up * hFar / 2) + (orientation[0] * wFar / 2);
+		farPoints[2] = fc - (up * hFar / 2) - (orientation[0] * wFar / 2);
+		farPoints[3] = fc - (up * hFar / 2) + (orientation[0] * wFar / 2);
+
+		min = glm::vec3(std::numeric_limits<float>::max());
+		max = glm::vec3(- std::numeric_limits<float>::max());
+
+		for (int i = 0; i < 4; i++) {
+			for (int j = 0; j < 3; j++) {
+				if (nearPoints[i][j] < min[j]) {
+					min[j] = nearPoints[i][j];
+				}
+				if (nearPoints[i][j] > max[j]) {
+					max[j] = nearPoints[i][j];
+				}
+			}
+		}
+		for (int i = 0; i < 4; i++) {
+			for (int j = 0; j < 3; j++) {
+				if (farPoints[i][j] < min[j]) {
+					min[j] = farPoints[i][j];
+				}
+				if (farPoints[i][j] > max[j]) {
+					max[j] = farPoints[i][j];
+				}
+			}
+		}
+
+		/*
+		// Precalculate normalized directions between points
+		nearDirs[0] = glm::normalize(nearPoints[1] - nearPoints[0]); // Top l to r
+		nearDirs[1] = glm::normalize(nearPoints[0] - nearPoints[2]); // Left b to t
+		nearDirs[2] = glm::normalize(nearPoints[3] - nearPoints[2]); // Bottom l to r
+		nearDirs[1] = glm::normalize(nearPoints[1] - nearPoints[3]); // Right b to t
+
+		farDirs[0] = glm::normalize(farPoints[1] - farPoints[0]); // Top l to r
+		farDirs[1] = glm::normalize(farPoints[0] - farPoints[2]); // Left b to t
+		farDirs[2] = glm::normalize(farPoints[3] - farPoints[2]); // Bottom l to r
+		farDirs[1] = glm::normalize(farPoints[1] - farPoints[3]); // Right b to t
+		*/
+	}
+
+	bool quadInFrustum(glm::vec3 points[4]) {
+		for (int i = 0; i < 4; i++) {
+			if (pointInFrustum(points[i])) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool pointInFrustum(glm::vec3 point) {
+		glm::vec4 pc = viewProj() * glm::vec4(point, 1.0);
+		glm::vec3 pcn = glm::vec3(pc.xyz / pc.w);
+		return (pcn.x >= -1 && pcn.x <= 1) &&
+			(pcn.y >= -1 && pcn.y <= 1) &&
+			(pcn.z >= -1 && pcn.z <= 1);
 	}
 
 	glm::mat4 view() const { return transform(-pos * orientation, glm::vec3(1.0f), transpose(orientation)); }
@@ -178,6 +262,8 @@ int run()
 	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
 	glm::vec4 lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 	auto lightConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::LightConstants));
+
+	auto grassPatchConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::GrassPatchConstants));
 
 	// load environment map
 	ogl::Texture envMap = nullptr;
@@ -377,14 +463,23 @@ int run()
 		 
 		// Reference Geometry Grass
 		{
+			glsl::GrassPatchConstants grassPatchConst;
+
+			{
+				grassPatchConst.Position = glm::vec3(0.0);
+				grassPatchConst.Size = 40;
+				grassPatchConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&grassPatchConst, 1));
+			}
+
 			hdrBuffer.bind(GL_FRAMEBUFFER);
 
 			glEnable(GL_DEPTH_TEST);
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
 			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
+			grassPatchConstBuffer.bind(GL_UNIFORM_BUFFER, 2);
 			nullVertexArrays.bind();
 			geometryGrassShader.bind();
-			glPatchParameteri(GL_PATCH_VERTICES, 1); // 1 Vertex per Patch 
+			glPatchParameteri(GL_PATCH_VERTICES, 1); // 1 Vertex per (Tessellation) Patch 
 			glDrawArrays(GL_PATCHES, 0, bladeCount); // Draw vertices, shader will create grass blades for each one with random positions
 		}
 		
