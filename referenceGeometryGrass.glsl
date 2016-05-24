@@ -55,7 +55,7 @@ void main()
 
 	// Grass blade
 	float minHeight = 0.2;
-	float maxHeight = 1.5;
+	float maxHeight = grassPatch.MaxHeight;
 
 	// 1.0 = full 360 degree rotation possible
 	float rotLimitFactorX = 0.01;

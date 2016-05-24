@@ -35,4 +35,5 @@ struct GrassPatchConstants
 {
 	vec3 Position;
 	float Size;
+	float MaxHeight;
 };
