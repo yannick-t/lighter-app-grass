@@ -174,7 +174,7 @@ void main() {
 		}
 
 		gl_TessLevelInner[0] = 1;
-		gl_TessLevelInner[0] = 1;
+		gl_TessLevelInner[1] = 1;
 
 		gl_TessLevelOuter[0] = lod;
 		gl_TessLevelOuter[1] = 1;

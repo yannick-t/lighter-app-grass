@@ -131,6 +131,15 @@ struct Camera {
 		}
 	}
 
+	float computeFootprintQuad(glm::vec3 points[4]) {
+		glm::vec2 clippedPoints[8];
+		cohenSutherland(points[0].x, points[0].y, points[1].x, points[1].y, &clippedPoints[0]);
+		cohenSutherland(points[1].x, points[1].y, points[2].x, points[2].y, &clippedPoints[2]);
+		cohenSutherland(points[2].x, points[2].y, points[3].x, points[3].y, &clippedPoints[4]);
+		cohenSutherland(points[3].x, points[3].y, points[0].x, points[0].y, &clippedPoints[6]);
+		return computeFootprintOctagonNDC(clippedPoints);
+	}
+
 	float computeFootprintOctagonNDC(glm::vec2 clippedPoints[8]) {
 		int N = 8;
 
@@ -144,20 +153,32 @@ struct Camera {
 		return abs(area);
 	}
 
-	bool normalizedQuadInFrustum(glm::vec3 points[4], glm::vec2 clippedXY[8]) {
-		glm::vec2 clippedXZ[8];
-		return normalizedLineInFrustum(points[0], points[1], &clippedXY[0], &clippedXZ[0]) || normalizedLineInFrustum(points[1], points[2], &clippedXY[2], &clippedXZ[2]) ||
-			normalizedLineInFrustum(points[2], points[3], &clippedXY[4], &clippedXZ[4]) || normalizedLineInFrustum(points[3], points[0], &clippedXY[6], &clippedXZ[6]);
+	bool quadInFrustum(glm::vec3 points[4]) {
+		// Find out if corners of the frustum are all on the same side of the quads plane
+		glm::vec3 zO = points[1] - points[0];
+		glm::vec3 zT = points[2] - points[0];
+		glm::vec3 abc = cross(zO, zT);
+		float d = -(abc.x * points[0].x + abc.y * points[1].y + abc.z * points[2].z);
+
+		bool negative = false;
+		if (dot(glm::vec4(abc, d), glm::vec4(nearPoints[0], 1.0)) < 0) {
+			negative = true;
+		}
+		for (size_t i = 1; i < 4; i++) {
+			if (dot(glm::vec4(abc, d), glm::vec4(nearPoints[i], 1.0)) >= 0 && negative) {
+				return true;
+			}
+		}
+		for (size_t i = 0; i < 4; i++) {
+			if (dot(glm::vec4(abc, d), glm::vec4(farPoints[i], 1.0)) >= 0 && negative) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
-	bool normalizedLineInFrustum(glm::vec3 p1, glm::vec3 p2, glm::vec2 xyResult[2], glm::vec2 xzResult[2]) {
-		// Use 2 times Cohen Sutherland
-
-
-		return(cohenSutherland(p1.x, p1.y, p2.x, p2.y, xyResult) && cohenSutherland(p1.z, p1.y, p2.z, p2.y, xzResult));
-	}
-
-	bool cohenSutherland(double x0, double y0, double x1, double y1, glm::vec2 result[2]) {
+	bool cohenSutherland(float x0, float y0, float x1, float y1, glm::vec2 result[2]) {
 		// Mostly from wikipedia
 		OutCode outcode0 = computeOutCode(x0, y0);
 		OutCode outcode1 = computeOutCode(x1, y1);
@@ -592,25 +613,31 @@ int run() {
 					for (float z = start.y; z <= end.y; z += baseGrassPatchSize) {
 						// Check if patch is in view frustum
 
-						glm::mat4 vP = camera.viewProj();
 
-						glm::vec3 points[4]{camera.pointToNDC(vP, glm::vec3(x, grassPatchMaxHeight, z)), camera.pointToNDC(vP, glm::vec3(x + baseGrassPatchSize, grassPatchMaxHeight, z)),
-							camera.pointToNDC(vP, glm::vec3(x, grassPatchMaxHeight, z + baseGrassPatchSize)), camera.pointToNDC(vP, glm::vec3(x + baseGrassPatchSize, grassPatchMaxHeight, z + baseGrassPatchSize))};
+						glm::vec3 points[4]{glm::vec3(x, grassPatchMaxHeight, z),  glm::vec3(x + baseGrassPatchSize, grassPatchMaxHeight, z),
+							 glm::vec3(x, grassPatchMaxHeight, z + baseGrassPatchSize), glm::vec3(x + baseGrassPatchSize, grassPatchMaxHeight, z + baseGrassPatchSize)};
+						
 
-						glm::vec2 clippedXY[8];
-
-						if (camera.normalizedQuadInFrustum(points, clippedXY)) {
+						if (camera.quadInFrustum(points)) {
 							// Draw patch + subpatches
 							// calc footprint
-							float relativeFootprint = camera.computeFootprintOctagonNDC(clippedXY) / camera.maxFootprint;
+							glm::mat4 vP = camera.viewProj();
+							glm::vec3 ndcPoints[4];
+							for (size_t i = 0; i < 4; i++)
+							{
+								ndcPoints[i] = camera.pointToNDC(vP, points[i]);
+							}
+
+							float relativeFootprint = camera.computeFootprintQuad(points) / camera.maxFootprint;
+							printf("relative footprint: %f \n", relativeFootprint);
 
 							float patchSize = baseGrassPatchSize;
-							float density = baseGrassDensity * relativeFootprint * maxFootprintDensityFactor;
+							float density = baseGrassDensity * maxFootprintDensityFactor;
 
 
 							glsl::GrassPatchConstants grassPatchConst; 
 							{
-								grassPatchConst.Position = glm::vec3(x, 0.0, z);
+								grassPatchConst.Position = glm::vec3(0.0, 0.0, 0.0);
 								grassPatchConst.Size = patchSize;
 								grassPatchConst.MaxHeight = grassPatchMaxHeight;
 								grassPatchConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&grassPatchConst, 1));
@@ -627,7 +654,7 @@ int run() {
 							glPatchParameteri(GL_PATCH_VERTICES, 1); // 1 Vertex per (Tessellation) Patch 
 							glDrawArrays(GL_PATCHES, 0, patchSize * patchSize * density); // Draw vertices, shader will create grass blades for each one with random positions
 
-
+							/*
 							// Draw subpatches
 
 							count++;
