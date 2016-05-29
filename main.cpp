@@ -41,14 +41,6 @@ namespace glsl {
 bool const stdx::is_debugger_present = IsDebuggerPresent() != FALSE;
 
 struct Camera {
-	typedef int OutCode;
-
-	const int INSIDE = 0; // 0000
-	const int LEFT = 1; // 0001
-	const int RIGHT = 2; // 0010
-	const int BOTTOM = 4; // 0100
-	const int TOP = 8; // 1000
-
 	const int maxFootprint = 4;
 
 	glm::vec3 pos;
@@ -58,13 +50,18 @@ struct Camera {
 	float nearPlane;
 	float farPlane;
 
-	float hNear;
-	float wNear;
-	float hFar;
-	float wFar;
+	glm::mat4 viewProjection;
+	glm::mat4 viewProjectionInverse;
 
+	// frustum defined by points and normals
 	glm::vec3 nearPoints[4];
 	glm::vec3 farPoints[4];
+	glm::vec3 rightNormal;
+	glm::vec3 leftNormal;
+	glm::vec3 topNormal;
+	glm::vec3 bottomNormal;
+	glm::vec3 nearNormal;
+	glm::vec3 farNormal;
 
 	glm::vec3 max;
 	glm::vec3 min;
@@ -73,7 +70,7 @@ struct Camera {
 		: fov(90.0f)
 		  , aspect(1.0f)
 		  , nearPlane(0.1f)
-		  , farPlane(1000.0f) {
+		  , farPlane(100.0f) {
 	}
 
 	void lookTo(glm::vec3 const& pos, glm::vec3 const& where, glm::vec3 const& up) {
@@ -86,31 +83,51 @@ struct Camera {
 		orientation[0] = normalize(cross(up, orientation[2]));
 		orientation[1] = normalize(cross(orientation[2], orientation[0]));
 		orientation[2] = normalize(orientation[2]);
+		recalcualteFrustum();
+	}
 
-		// Todo: maybe optimize
-		float hNear = 2 * tan(fov / 2) * nearPlane;
-		float wNear = hNear * aspect;
+	void rePosition(glm::vec3 pos) {
+		this->pos = pos;
+		recalcualteFrustum();
+	}
 
-		float hFar = 2 * tan(fov / 2) * farPlane;
-		float wFar = hFar * aspect;
+	void recalcualteFrustum() {
+		calcViewProj();
 
-		glm::vec3 nc = pos + orientation[2] * nearPlane;
-		nearPoints[0] = nc + (up * hNear / 2) - (orientation[0] * wNear / 2); // top left
-		nearPoints[1] = nc + (up * hNear / 2) + (orientation[0] * wNear / 2); // top right
-		nearPoints[2] = nc - (up * hNear / 2) - (orientation[0] * wNear / 2); // bottom left
-		nearPoints[3] = nc - (up * hNear / 2) + (orientation[0] * wNear / 2); // bottom right
+		glm::vec4 ntl = (viewProjectionInverse * glm::vec4(-1.0, 1.0, -1.0, 1.0)); // top left
+		nearPoints[0] = ntl.xyz / ntl.w;
+		glm::vec4 ntr = (viewProjectionInverse * glm::vec4(1.0, 1.0, -1.0, 1.0)); // top right
+		nearPoints[1] = ntr.xyz / ntr.w;
+		glm::vec4 nbl = (viewProjectionInverse * glm::vec4(-1.0, -1.0, -1.0, 1.0)); // bottom left
+		nearPoints[2] = nbl.xyz / nbl.w;
+		glm::vec4 nbr = (viewProjectionInverse * glm::vec4(1.0, -1.0, -1.0, 1.0)); // bottom right
+		nearPoints[3] = nbr.xyz / nbr.w;
 
-		glm::vec3 fc = pos + orientation[2] * farPlane;
-		farPoints[0] = fc + (up * hFar / 2) - (orientation[0] * wFar / 2); // ...
-		farPoints[1] = fc + (up * hFar / 2) + (orientation[0] * wFar / 2);
-		farPoints[2] = fc - (up * hFar / 2) - (orientation[0] * wFar / 2);
-		farPoints[3] = fc - (up * hFar / 2) + (orientation[0] * wFar / 2);
+
+		glm::vec4 ftl = (viewProjectionInverse * glm::vec4(-1.0, 1.0, 1.0, 1.0)); // top left
+		farPoints[0] = ftl.xyz / ftl.w;
+		glm::vec4 ftr = (viewProjectionInverse * glm::vec4(1.0, 1.0, 1.0, 1.0)); // top right
+		farPoints[1] = ftr.xyz / ftr.w;
+		glm::vec4 fbl = (viewProjectionInverse * glm::vec4(-1.0, -1.0, 1.0, 1.0)); // bottom left
+		farPoints[2] = fbl.xyz / fbl.w;
+		glm::vec4 fbr = (viewProjectionInverse * glm::vec4(1.0, -1.0, 1.0, 1.0)); // bottom right
+		farPoints[3] = fbr.xyz / fbr.w;
+
+		// Todo: optimize
+		rightNormal = glm::normalize(cross(nearPoints[1] - farPoints[1], farPoints[3] - farPoints[1]));
+		leftNormal = glm::normalize(cross(farPoints[0] - nearPoints[0], nearPoints[2] - nearPoints[0]));
+		topNormal = glm::normalize(cross(farPoints[1] - nearPoints[1], nearPoints[0] - nearPoints[1]));
+		bottomNormal = glm::normalize(cross(farPoints[2] - nearPoints[2], nearPoints[3] - nearPoints[2]));
+		nearNormal = glm::normalize(cross(nearPoints[0] - nearPoints[1], nearPoints[3] - nearPoints[1]));
+		farNormal = glm::normalize(cross(farPoints[1] - farPoints[0], farPoints[2] - farPoints[0]));
 
 		min = glm::vec3(std::numeric_limits<float>::max());
-		max = glm::vec3(- std::numeric_limits<float>::max());
+		max = glm::vec3(-std::numeric_limits<float>::max());
 
 		for (int i = 0; i < 4; i++) {
+			// printf("i: %d - x: %f, y: %f, z: %f \n", i, nearPoints[i].x, nearPoints[i].y, nearPoints[i].z);
 			for (int j = 0; j < 3; j++) {
+
 				if (nearPoints[i][j] < min[j]) {
 					min[j] = nearPoints[i][j];
 				}
@@ -120,6 +137,7 @@ struct Camera {
 			}
 		}
 		for (int i = 0; i < 4; i++) {
+			// printf("i: %d - x: %f, y: %f, z: %f \n", i, farPoints[i].x, farPoints[i].y, farPoints[i].z);
 			for (int j = 0; j < 3; j++) {
 				if (farPoints[i][j] < min[j]) {
 					min[j] = farPoints[i][j];
@@ -131,22 +149,13 @@ struct Camera {
 		}
 	}
 
-	float computeFootprintQuad(glm::vec3 points[4]) {
-		glm::vec2 clippedPoints[8];
-		cohenSutherland(points[0].x, points[0].y, points[1].x, points[1].y, &clippedPoints[0]);
-		cohenSutherland(points[1].x, points[1].y, points[2].x, points[2].y, &clippedPoints[2]);
-		cohenSutherland(points[2].x, points[2].y, points[3].x, points[3].y, &clippedPoints[4]);
-		cohenSutherland(points[3].x, points[3].y, points[0].x, points[0].y, &clippedPoints[6]);
-		return computeFootprintOctagonNDC(clippedPoints);
-	}
-
-	float computeFootprintOctagonNDC(glm::vec2 clippedPoints[8]) {
-		int N = 8;
+	float computeFootprintNDCQuad(glm::vec3 points[4]) {
+		int N = 4;
 
 		// compute area
 		float area = 0;
 		for (size_t i = 1; i <= N; ++i) {
-			area += clippedPoints[i % N].x * (clippedPoints[(i + 1) % N].y - clippedPoints[(i - 1) % N].y);
+			area += points[i % N].x * (points[(i + 1) % N].y - points[(i - 1) % N].y);
 		}
 		area /= 2;
 
@@ -154,103 +163,43 @@ struct Camera {
 	}
 
 	bool quadInFrustum(glm::vec3 points[4]) {
-		// Find out if corners of the frustum are all on the same side of the quads plane
-		glm::vec3 zO = points[1] - points[0];
-		glm::vec3 zT = points[2] - points[0];
-		glm::vec3 abc = cross(zO, zT);
-		float d = -(abc.x * points[0].x + abc.y * points[1].y + abc.z * points[2].z);
+		// Find out if points of the quad are all outside of one of the frustums planes
+		/*
+		if (pointsOutsideOfPlane(pos, rightNormal, points)) {
+			printf("outside right plane \n");
+		}
+		if (pointsOutsideOfPlane(pos, leftNormal, points)) {
+			printf("outside left plane \n");
+		}
+		if (pointsOutsideOfPlane(pos, topNormal, points)) {
+			printf("outside top plane \n");
+		}
+		if (pointsOutsideOfPlane(pos, bottomNormal, points)) {
+			printf("outside bottom plane \n");
+		}
+		if (pointsOutsideOfPlane(nearPoints[0], nearNormal, points)) {
+			printf("outside near plane \n");
+		}
+		if (pointsOutsideOfPlane(farPoints[0], farNormal, points)) {
+			printf("outside far plane \n");
+		}*/
 
-		bool negative = false;
-		if (dot(glm::vec4(abc, d), glm::vec4(nearPoints[0], 1.0)) < 0) {
-			negative = true;
-		}
-		for (size_t i = 1; i < 4; i++) {
-			if (dot(glm::vec4(abc, d), glm::vec4(nearPoints[i], 1.0)) >= 0 && negative) {
-				return true;
-			}
-		}
-		for (size_t i = 0; i < 4; i++) {
-			if (dot(glm::vec4(abc, d), glm::vec4(farPoints[i], 1.0)) >= 0 && negative) {
-				return true;
-			}
-		}
+		if (pointsOutsideOfPlane(pos, rightNormal, points) || pointsOutsideOfPlane(pos, leftNormal, points) || pointsOutsideOfPlane(pos, topNormal, points) ||
+			pointsOutsideOfPlane(pos, bottomNormal, points) || pointsOutsideOfPlane(nearPoints[0], nearNormal, points) || pointsOutsideOfPlane(farPoints[0], farNormal, points)) {
 
-		return false;
+			return false;
+		}
+		return true;
 	}
 
-	bool cohenSutherland(float x0, float y0, float x1, float y1, glm::vec2 result[2]) {
-		// Mostly from wikipedia
-		OutCode outcode0 = computeOutCode(x0, y0);
-		OutCode outcode1 = computeOutCode(x1, y1);
-		bool accept = false;
-
-		while (true) {
-			if (!(outcode0 | outcode1)) { 
-				// Trivial accept
-				accept = true;
-				break;
-			}
-			else if (outcode0 & outcode1) { 
-				// Trivial reject
-				break;
-			}
-			else {
-				double x, y;
-
-				// outside point
-				OutCode outcodeOut = outcode0 ? outcode0 : outcode1;
-
-				if (outcodeOut & TOP) {
-					x = x0 + (x1 - x0) * (1 - y0) / (y1 - y0);
-					y = 1;
-				}
-				else if (outcodeOut & BOTTOM) {
-					x = x0 + (x1 - x0) * (-1 - y0) / (y1 - y0);
-					y = -1;
-				}
-				else if (outcodeOut & RIGHT) {
-					y = y0 + (y1 - y0) * (1 - x0) / (x1 - x0);
-					x = 1;
-				}
-				else if (outcodeOut & LEFT) {
-					y = y0 + (y1 - y0) * (-1 - x0) / (x1 - x0);
-					x = -1;
-				}
-
-				if (outcodeOut == outcode0) {
-					x0 = x;
-					y0 = y;
-					outcode0 = computeOutCode(x0, y0);
-				}
-				else {
-					x1 = x;
-					y1 = y;
-					outcode1 = computeOutCode(x1, y1);
-				}
+	bool pointsOutsideOfPlane(glm::vec3 planePoint, glm::vec3 planeNormal, glm::vec3 points[4]) {
+		// outside == on the side of the normal
+		for (int i = 0; i < 4; i++) {
+			if (dot(planeNormal, points[i] - planePoint) < 0) {
+				return false;
 			}
 		}
-		if (accept) {
-			result[0] = glm::vec2(x0, y0);
-			result[1] = glm::vec2(x1, y1);
-		}
-		return accept;
-	}
-
-	OutCode computeOutCode(float x, float y) {
-		OutCode code;
-
-		code = INSIDE;
-
-		if (x < -1)
-			code |= LEFT;
-		else if (x > 1)
-			code |= RIGHT;
-		if (y < -1)
-			code |= BOTTOM;
-		else if (y > 1)
-			code |= TOP;
-
-		return code;
+		return true;
 	}
 
 	glm::vec3 pointToNDC(glm::mat4 vP, glm::vec3 p) {
@@ -272,8 +221,9 @@ struct Camera {
 		return glm::perspective(glm::radians(fov), aspect, nearPlane, farPlane);
 	}
 
-	glm::mat4 viewProj() const {
-		return proj() * view();
+	void calcViewProj() {
+		viewProjection = proj() * view();
+		viewProjectionInverse = glm::inverse(viewProjection);
 	}
 };
 
@@ -382,7 +332,7 @@ int run() {
 
 	// camera
 	Camera camera;
-	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.3f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	camera.lookTo(glm::vec3(-1.0f, 0.0f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
 
 	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
@@ -391,7 +341,7 @@ int run() {
 
 	// Grass Patch
 	// Todo: more sliders
-	float baseGrassPatchSize = 200;
+	float baseGrassPatchSize = 40;
 	float grassPatchMaxHeight = 1.5;
 	float baseGrassDensity = 1; // number of grass blades per unit for largest grass patches
 	float maxFootprintDensityFactor = 10; // Factor for the density in relation to the size of the footprint
@@ -455,7 +405,7 @@ int run() {
 			ui.addText(nullptr, "Tweak", "", nullptr);
 			ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
 			ui.addSlider(&baseGrassDensity, "base grass density for patches", baseGrassDensity, 100, baseGrassDensity, 1);
-			ui.addSlider(&maxFootprintDensityFactor, "factor for the density of the patches relative to the footprint", maxFootprintDensityFactor, 1, maxFootprintDensityFactor, 1);
+			ui.addSlider(&maxFootprintDensityFactor, "factor for the density of the patches relative to the footprint", maxFootprintDensityFactor, 100, maxFootprintDensityFactor, 1);
 			//			if (auto uiUnion = ui::Union(ui)) 
 			{
 				// ui.addButton(3, "test button", nullptr);
@@ -493,7 +443,11 @@ int run() {
 	unsigned frameIdx = 0;
 	float smoothDt = 1.0f;
 	float smoothFDt = 1.0f;
+
 	float fps = 0;
+
+	int bladeCount = 0;
+	int patchCount = 0;
 
 	while (!wnd.shouldClose()) {
 		glfwPollEvents();
@@ -534,9 +488,12 @@ int run() {
 				keyboard.keyState[GLFW_KEY_D] - keyboard.keyState[GLFW_KEY_A]
 				, keyboard.keyState[GLFW_KEY_SPACE] - keyboard.keyState[GLFW_KEY_Q]
 				, keyboard.keyState[GLFW_KEY_S] - keyboard.keyState[GLFW_KEY_W]
-			);
+				);
 
-			camera.pos += moveDelta * (camera.orientation * glm::vec3(moveInput));
+			if (moveInput.x != 0 || moveInput.y != 0 || moveInput.z != 0) {
+				camera.rePosition(camera.pos + moveDelta * (camera.orientation * glm::vec3(moveInput))); 
+			}
+
 		}
 
 		// animate sun light
@@ -564,7 +521,7 @@ int run() {
 			camConst.IntResolution = screenDim;
 			camConst.FrameIdx = frameIdx;
 			camConst.NumBlocks32X = glm::ceil_div(screenDim.x, 32U);
-			camConst.ViewProj = camera.viewProj();
+			camConst.ViewProj = camera.viewProjection;
 			camConst.ViewProjInv = inverse(camConst.ViewProj);
 			camConst.CamPos = camera.pos;
 			camConst.CamDir = -camera.orientation[2];
@@ -598,6 +555,8 @@ int run() {
 
 		// Reference Geometry Grass
 		{
+			bladeCount = 0;
+			patchCount = 0;
 			if (camera.min.y < grassPatchMaxHeight && camera.max.y > grassPatchMaxHeight) {
 				// Test for patches that are possibly in the frustum if they are
 				// Round down to next patch position
@@ -607,7 +566,6 @@ int run() {
 				glm::vec2 end = glm::vec2((ceilf(camera.max.x / baseGrassPatchSize)) * baseGrassPatchSize,
 				                          (ceilf(camera.max.z / baseGrassPatchSize)) * baseGrassPatchSize);
 
-				int count = 0;
 
 				for (float x = start.x; x <= end.x; x += baseGrassPatchSize) {
 					for (float z = start.y; z <= end.y; z += baseGrassPatchSize) {
@@ -621,23 +579,23 @@ int run() {
 						if (camera.quadInFrustum(points)) {
 							// Draw patch + subpatches
 							// calc footprint
-							glm::mat4 vP = camera.viewProj();
+							glm::mat4 vP = camera.viewProjection;
 							glm::vec3 ndcPoints[4];
 							for (size_t i = 0; i < 4; i++)
 							{
 								ndcPoints[i] = camera.pointToNDC(vP, points[i]);
 							}
 
-							float relativeFootprint = camera.computeFootprintQuad(points) / camera.maxFootprint;
-							printf("relative footprint: %f \n", relativeFootprint);
+							float relativeFootprint = camera.computeFootprintNDCQuad(ndcPoints) / camera.maxFootprint;
+							// printf("relative footprint: %f \n", relativeFootprint);
 
 							float patchSize = baseGrassPatchSize;
 							float density = baseGrassDensity * maxFootprintDensityFactor;
-
+							int blades = patchSize * patchSize * density;
 
 							glsl::GrassPatchConstants grassPatchConst; 
 							{
-								grassPatchConst.Position = glm::vec3(0.0, 0.0, 0.0);
+								grassPatchConst.Position = glm::vec3(x, 0.0, z);
 								grassPatchConst.Size = patchSize;
 								grassPatchConst.MaxHeight = grassPatchMaxHeight;
 								grassPatchConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&grassPatchConst, 1));
@@ -652,18 +610,18 @@ int run() {
 							nullVertexArrays.bind();
 							geometryGrassShader.bind();
 							glPatchParameteri(GL_PATCH_VERTICES, 1); // 1 Vertex per (Tessellation) Patch 
-							glDrawArrays(GL_PATCHES, 0, patchSize * patchSize * density); // Draw vertices, shader will create grass blades for each one with random positions
+							glDrawArrays(GL_PATCHES, 0, blades); // Draw vertices, shader will create grass blades for each one with random positions
 
-							/*
-							// Draw subpatches
+							
+							// Todo: Draw subpatches
 
-							count++;
+							bladeCount += blades;
+							patchCount++;
 						}
 					}
 				}
-
-				printf("%d \n", count);
 			}
+
 		}
 
 		// Blit / tonemap
@@ -724,9 +682,19 @@ int run() {
 				glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
 				ui.addSlider(&dt, "dt (ms)", dt * 1000.0f, 500.0f, nullptr);
+
 				char fpsString[20];
 				_snprintf(fpsString, 20, "%f FPS", fps);
 				ui.addText(nullptr, fpsString, "", nullptr);
+
+				char bladeCountString[30];
+				_snprintf(bladeCountString, 30, "%d grass blades", bladeCount);
+				ui.addText(nullptr, bladeCountString, "", nullptr);
+
+				char patchCountString[20];
+				_snprintf(patchCountString, 20, "%d patches", patchCount);
+				ui.addText(nullptr, patchCountString, "", nullptr);
+
 				tweakUi(ui);
 				// ui::preset_user_interface(ui, tweakUi, defaultIniFile);
 
@@ -766,7 +734,7 @@ int run() {
 
 		if (frameIdx % 15 == 0) {
 			fps = 1.0f / smoothFDt;
-			std::cout << "Frame time: " << 1000.0f * smoothFDt << " ms; " << 1.0f / smoothFDt << " FPS" << std::endl;
+			// std::cout << "Frame time: " << 1000.0f * smoothFDt << " ms; " << 1.0f / smoothFDt << " FPS" << std::endl;
 		}
 
 		Sleep(12);
