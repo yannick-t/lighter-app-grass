@@ -10,7 +10,7 @@ set(APPLICATION_DATA
   data/simple.obj
   data/simpler.obj
   )
-  
+
 #--------------------------------------------------------------------
 # Create target
 #--------------------------------------------------------------------
@@ -23,6 +23,7 @@ set(APPLICATION_SHADER_SRC
   tonemap.glsl
   phong.glsl
   referenceGeometryGrass.glsl
+  debug.glsl
   )
 set(APPLICATION_CODE
   main.cpp
@@ -62,6 +63,6 @@ if (LIGHTER_INSTALL)
     install (TARGETS ${PROJECT_NAME} DESTINATION bin)
     install (FILES ${APPLICATION_SYSTEM_SRC} DESTINATION bin)
     install (FILES ${APPLICATION_SHADER_SRC} ${APPLICATION_DATA} DESTINATION ${LIGHTER_INSTALL_DATA_DIRECTORY})
-	
+
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND ${LIGHTER_INSTALL_COMMAND})
 endif()
