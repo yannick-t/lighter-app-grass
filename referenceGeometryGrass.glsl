@@ -75,7 +75,7 @@ void main()
 
 
 
-	RandState rng = rand_init(gl_VertexID, 11); 
+	RandState rng = rand_init(gl_VertexID, grassPatch.PatchId); 
 
 	// Randomize position
 	vec3 bladePosition;
