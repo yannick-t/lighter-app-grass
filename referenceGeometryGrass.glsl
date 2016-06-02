@@ -75,7 +75,7 @@ void main()
 
 
 
-	RandState rng = rand_init(gl_VertexID, grassPatch.PatchId); 
+	RandState rng = rand_init(gl_VertexID, int(grassPatch.Position.x)); 
 
 	// Randomize position
 	vec3 bladePosition;
@@ -84,6 +84,8 @@ void main()
 	bladePosition.y = 0.0;
 
 	bladePosition = grassPatch.Position + bladePosition;
+
+	float camDist = length(camera.CamPos - bladePosition);
 
 	gl_Position = vec4(bladePosition, 1.0);
 	vout.worldPos = bladePosition;
@@ -136,6 +138,7 @@ void main()
 
 	// Randomize (base) width
 	float baseWidth = minBaseWidth + rand_next(rng) * (maxBaseWidth - minBaseWidth);
+	baseWidth = baseWidth * ((camDist / camera.FarPlane) * grassPatch.MaxWidthFactor);
 	float baseWidthTopDeviation = baseWidth * (rand_next(rng) * maxBaseWidthDeviationFactor);
 
 	// Calculate the position of the vertices of the quad to be tessellated representing the grass blade

@@ -36,5 +36,6 @@ struct GrassPatchConstants
 	vec3 Position;
 	float Size;
 	float MaxHeight;
+	float MaxWidthFactor;
 	int PatchId;
 };

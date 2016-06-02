@@ -72,7 +72,7 @@ struct Camera {
 		: fov(90.0f)
 		  , aspect(1.0f)
 		  , nearPlane(0.1f)
-		  , farPlane(1000.0f) {
+		  , farPlane(100.0f) {
 	}
 
 	void lookTo(glm::vec3 const& pos, glm::vec3 const& where, glm::vec3 const& up) {
@@ -284,6 +284,7 @@ float baseGrassDensity = 0.1; // number of grass blades per unit for largest gra
 float maxPatchDistanceToSubdivide = 10;
 float maxPatchSubdivRecursion = 3;
 float subdivDensityFactor = 2;
+float maxGrassBladeWidthFactor = 10;
 
 void addAndSubdivide(float x, float z, float size, float density, Camera camera, std::vector<GrassPatch> &patches, int recursion = 0);
 void calcPatches(Camera camera, std::vector<GrassPatch> &patches);
@@ -428,12 +429,6 @@ int run() {
 
 	// Grass Patch
 	// Todo: more sliders
-	baseGrassPatchSize = 200;
-	grassPatchMaxHeight = 1.5;
-	baseGrassDensity = 0.1; // number of grass blades per unit for largest grass patches
-	maxPatchDistanceToSubdivide = 10;
-	maxPatchSubdivRecursion = 3;
-	subdivDensityFactor = 2;
 	auto grassPatchConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::GrassPatchConstants));
 	std::vector<GrassPatch> patches;
 
@@ -498,6 +493,7 @@ int run() {
 			ui.addSlider(&maxPatchDistanceToSubdivide, "the maximum distance of a patch to subdivide it", maxPatchDistanceToSubdivide, 100, maxPatchDistanceToSubdivide, 0.5f);
 			ui.addSlider(&maxPatchSubdivRecursion, "maximum recursion depth for the subdivision", maxPatchSubdivRecursion, 10, maxPatchSubdivRecursion, 1.0f);
 			ui.addSlider(&subdivDensityFactor, "factor applied to the density for subdivided patches", subdivDensityFactor, 20, subdivDensityFactor, 1.0f);
+			ui.addSlider(&maxGrassBladeWidthFactor, "maximum scaling factor applied t the grass blade width with distance", maxGrassBladeWidthFactor, 1000, maxGrassBladeWidthFactor);
 			//			if (auto uiUnion = ui::Union(ui)) 
 			{
 				// ui.addButton(3, "test button", nullptr);
@@ -667,6 +663,7 @@ int run() {
 						grassPatchConst.Position = patches[i].pos;
 						grassPatchConst.Size = patches[i].size;
 						grassPatchConst.MaxHeight = grassPatchMaxHeight;
+						grassPatchConst.MaxWidthFactor = maxGrassBladeWidthFactor;
 						grassPatchConst.PatchId = i;
 						grassPatchConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&grassPatchConst, 1));
 					}
