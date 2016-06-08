@@ -395,6 +395,10 @@ int run() {
 	shaders.push_back(&tonemapShader);
 	ogl::ProgramWithTime geometryGrassShader("data/referenceGeometryGrass.glsl", "", ogl::ProgramWithTime::HasHS | ogl::ProgramWithTime::HasDS);
 	shaders.push_back(&geometryGrassShader);
+	ogl::ProgramWithTime computeShaderGrass("data/computeShaderGrass.glsl", "", ogl::ProgramWithTime::HasCS);
+	shaders.push_back(&computeShaderGrass);
+	ogl::ProgramWithTime csResultShader("data/csResultShader.glsl");
+	shaders.push_back(&csResultShader);
 	ogl::ProgramWithTime debugShader("data/debug.glsl");
 	shaders.push_back(&debugShader);
 	ogl::ProgramWithTime textShader("data/text.glsl", "", ogl::ProgramWithTime::HasGS);
@@ -431,6 +435,8 @@ int run() {
 	// Todo: more sliders
 	auto grassPatchConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::GrassPatchConstants));
 	std::vector<GrassPatch> patches;
+
+	auto csGrassConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CSGrassConstants));
 
 	// load environment map
 	ogl::Texture envMap = nullptr; {
@@ -644,7 +650,7 @@ int run() {
 		// Reference Geometry Grass
 		{
 
-			if (true) {
+			if (false) {
 				bladeCount = 0;
 
 				// Calculate patches if view frustum has changed or O is pressed
@@ -712,46 +718,46 @@ int run() {
 				}
 
 				patchCount = patches.size();
-			} else {
-
-				// Debug footprint
-				float points[] = {
-					0.0, grassPatchMaxHeight, 0.0,
-					0.0, grassPatchMaxHeight, 40.0,
-					0.0, grassPatchMaxHeight, 40.0,
-					40.0, grassPatchMaxHeight, 40.0,
-					40.0, grassPatchMaxHeight, 40.0,
-					40.0, grassPatchMaxHeight, 0.0,
-					40.0, grassPatchMaxHeight, 0.0,
-					0.0, grassPatchMaxHeight, 0.0
-				};
-
-				GLuint vbo = 0;
-				glGenBuffers(1, &vbo);
-				glBindBuffer(GL_ARRAY_BUFFER, vbo);
-				glBufferData(GL_ARRAY_BUFFER, 24 * sizeof(float), points, GL_STATIC_DRAW);
-
-				GLuint vao = 0;
-				glGenVertexArrays(1, &vao);
-				glBindVertexArray(vao);
-				glEnableVertexAttribArray(0);
-				glBindBuffer(GL_ARRAY_BUFFER, vbo);
-				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-
-				debugShader.bind();
-				glDrawArrays(GL_LINES, 0, 8);
-
-				std::vector<glm::vec3> ps{
-					glm::vec3(points[0], points[1], points[2]),
-					glm::vec3(points[3], points[4], points[5]),
-					glm::vec3(points[9], points[10], points[11]),
-					glm::vec3(points[15], points[16], points[17])
-				};
-
-				std::vector<glm::vec3> ndcPs(4);
-				camera.pointsToNDC(ps, ndcPs);
-				camera.computeFootprintNDCQuad(ndcPs);
 			}
+		}
+
+
+		// Compute Shader Grass
+		auto csResult = renderTargetPool.acquire(ogl::TextureDesc::make2D(GL_TEXTURE_2D, GL_RGBA32F, screenDim.x, screenDim.y));
+		{
+			glsl::CSGrassConstants csGrassConstants;
+			{
+				// Todo: sorted array of grid cells for front to back rendering
+				csGrassConstants.ScreenDim = screenDim;
+				csGrassConstants.GridStart = glm::vec3(0.0);
+				csGrassConstants.GridEnd = glm::vec3(40.0, 0.0, 40.0);
+				csGrassConstants.Step = 2.0;
+				csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
+			}
+
+			camConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
+			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 2);
+			// csResult.bind(GL_TEXTURE_2D, 2);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, csResult);
+			glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+			csGrassConstBuffer.bind(GL_UNIFORM_BUFFER, 3);
+			computeShaderGrass.bind();
+			glDispatchCompute(512, 512, 1);
+
+			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+			// Draw result
+			hdrBuffer.bind(GL_FRAMEBUFFER);
+			glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+			glDisable(GL_DEPTH_TEST);
+			camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
+			csResult.bind(GL_TEXTURE_2D, 1);
+			nullVertexArrays.bind();
+			csResultShader.bind();
+			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		}
 
 		// Blit / tonemap

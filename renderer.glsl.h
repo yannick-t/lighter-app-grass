@@ -39,3 +39,11 @@ struct GrassPatchConstants
 	float MaxWidthFactor;
 	int PatchId;
 };
+
+struct CSGrassConstants 
+{
+	uvec2 ScreenDim;
+	vec3 GridStart;
+	vec3 GridEnd;
+	float Step;
+};

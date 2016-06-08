@@ -23,6 +23,8 @@ set(APPLICATION_SHADER_SRC
   tonemap.glsl
   phong.glsl
   referenceGeometryGrass.glsl
+  computeShaderGrass.glsl
+  csResultShader.glsl
   debug.glsl
   )
 set(APPLICATION_CODE
