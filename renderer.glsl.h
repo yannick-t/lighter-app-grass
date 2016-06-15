@@ -42,8 +42,6 @@ struct GrassPatchConstants
 
 struct CSGrassConstants 
 {
-	uvec2 ScreenDim;
-	vec3 GridStart;
-	vec3 GridEnd;
+	vec3 FtBDirection;
 	float Step;
 };

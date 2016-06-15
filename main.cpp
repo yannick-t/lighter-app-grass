@@ -45,6 +45,7 @@ struct Camera {
 
 	glm::vec3 pos;
 	glm::mat3 orientation;
+	glm::vec3 regGridDirection;
 	float fov;
 	float aspect;
 	float nearPlane;
@@ -85,6 +86,21 @@ struct Camera {
 		orientation[0] = normalize(cross(up, orientation[2]));
 		orientation[1] = normalize(cross(orientation[2], orientation[0]));
 		orientation[2] = normalize(orientation[2]);
+
+		// recalc reg grid direction
+		float angle = atan2(orientation[2].z, orientation[2].x);
+		int octant = static_cast<int>(roundf(8 * angle / (2 * M_PI) + 8)) % 8;
+		switch (octant) {
+		case 0: regGridDirection = glm::vec3(-1, 0, 0); break;
+		case 1: regGridDirection = glm::vec3(-1, 0, -1); break;
+		case 2: regGridDirection = glm::vec3(0, 0, -1); break;
+		case 3: regGridDirection = glm::vec3(1, 0, -1); break;
+		case 4: regGridDirection = glm::vec3(1, 0, 0); break;
+		case 5: regGridDirection = glm::vec3(1, 0, 1); break;
+		case 6: regGridDirection = glm::vec3(0, 0, 1); break;
+		case 7: regGridDirection = glm::vec3(-1, 0, 1); break;
+		}
+
 		recalcualteFrustum();
 	}
 
@@ -152,12 +168,11 @@ struct Camera {
 		}
 	}
 
-	float computeFootprintNDCQuad(std::vector<glm::vec3> &points) {
-		float f = 0;   
-		int j = points.size() - 1; 
+	float computeFootprintNDCQuad(std::vector<glm::vec3>& points) {
+		float f = 0;
+		int j = points.size() - 1;
 
-		for (int i = 0; i < points.size(); i++)
-		{
+		for (int i = 0; i < points.size(); i++) {
 			f = f + (points[j].x + points[i].x) * (points[j].y - points[i].y);
 			j = i;
 		}
@@ -191,10 +206,10 @@ struct Camera {
 		return true;
 	}
 
-	void pointsToNDC(std::vector<glm::vec3> &p, std::vector<glm::vec3> &result) {
+	void pointsToNDC(std::vector<glm::vec3>& p, std::vector<glm::vec3>& result) {
 		for (int i = 0; i < p.size(); i++) {
 			glm::vec4 pc1 = viewProjection * glm::vec4(p[i], 1.0);
-			result[i] = (i, pc1.xyz * 1 / pc1.w);
+			result[i] = (i , pc1.xyz * 1 / pc1.w);
 		}
 	}
 
@@ -209,7 +224,7 @@ struct Camera {
 		float dx = std::max(std::max(min.x - pos.x, 0.0f), pos.x - max.x);
 		float dy = std::max(std::max(min.y - pos.y, 0.0f), pos.y - max.y);
 		float dz = std::max(std::max(min.z - pos.z, 0.0f), pos.z - max.z);
-		return std::sqrtf(dx*dx + dy*dy + dz*dz);
+		return std::sqrtf(dx * dx + dy * dy + dz * dz);
 	}
 
 	glm::mat4 view() const {
@@ -286,20 +301,20 @@ float maxPatchSubdivRecursion = 3;
 float subdivDensityFactor = 2;
 float maxGrassBladeWidthFactor = 10;
 
-void addAndSubdivide(float x, float z, float size, float density, Camera camera, std::vector<GrassPatch> &patches, int recursion = 0);
-void calcPatches(Camera camera, std::vector<GrassPatch> &patches);
+void addAndSubdivide(float x, float z, float size, float density, Camera camera, std::vector<GrassPatch>& patches, int recursion = 0);
+void calcPatches(Camera camera, std::vector<GrassPatch>& patches);
 
-void calcPatches(Camera camera, std::vector<GrassPatch> &patches) {
+void calcPatches(Camera camera, std::vector<GrassPatch>& patches) {
 	patches.clear();
 
 	if (camera.min.y < grassPatchMaxHeight && camera.max.y > grassPatchMaxHeight) {
 		// Test for patches that are possibly in the frustum if they are
 		// Round down to next patch position
 		glm::vec2 start = glm::vec2((floorf(camera.min.x / baseGrassPatchSize)) * baseGrassPatchSize,
-			(floorf(camera.min.z / baseGrassPatchSize)) * baseGrassPatchSize);
+		                            (floorf(camera.min.z / baseGrassPatchSize)) * baseGrassPatchSize);
 		// Round up to next patch position
 		glm::vec2 end = glm::vec2((ceilf(camera.max.x / baseGrassPatchSize)) * baseGrassPatchSize,
-			(ceilf(camera.max.z / baseGrassPatchSize)) * baseGrassPatchSize);
+		                          (ceilf(camera.max.z / baseGrassPatchSize)) * baseGrassPatchSize);
 
 		float x = 0;
 		float z = 0;
@@ -311,10 +326,10 @@ void calcPatches(Camera camera, std::vector<GrassPatch> &patches) {
 	}
 }
 
-void addAndSubdivide(float x, float z, float size, float density, Camera camera, std::vector<GrassPatch> &patches, int recursion) {
+void addAndSubdivide(float x, float z, float size, float density, Camera camera, std::vector<GrassPatch>& patches, int recursion) {
 	// Check if patch is in view frustum
-	std::vector<glm::vec3> points{ glm::vec3(x, grassPatchMaxHeight, z), glm::vec3(x + size, grassPatchMaxHeight, z),
-		glm::vec3(x + size, grassPatchMaxHeight, z + size), glm::vec3(x, grassPatchMaxHeight, z + size) };
+	std::vector<glm::vec3> points{glm::vec3(x, grassPatchMaxHeight, z), glm::vec3(x + size, grassPatchMaxHeight, z),
+		glm::vec3(x + size, grassPatchMaxHeight, z + size), glm::vec3(x, grassPatchMaxHeight, z + size)};
 
 
 	if (camera.quadInFrustum(points)) {
@@ -431,12 +446,25 @@ int run() {
 	glm::vec4 lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 	auto lightConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::LightConstants));
 
+
 	// Grass Patch
 	// Todo: more sliders
 	auto grassPatchConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::GrassPatchConstants));
 	std::vector<GrassPatch> patches;
 
 	auto csGrassConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CSGrassConstants));
+
+	// Compute Shader Grass result
+	GLuint csResult;
+	glGenTextures(1, &csResult);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, csResult);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
 
 	// load environment map
 	ogl::Texture envMap = nullptr; {
@@ -467,6 +495,11 @@ int run() {
 		camera.aspect = (float) width / (float) height;
 
 		renderTargetPool.free_unused();
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, csResult);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT,
+		                          NULL);
 	};
 	wnd.initialResize();
 
@@ -582,10 +615,10 @@ int run() {
 				keyboard.keyState[GLFW_KEY_D] - keyboard.keyState[GLFW_KEY_A]
 				, keyboard.keyState[GLFW_KEY_SPACE] - keyboard.keyState[GLFW_KEY_Q]
 				, keyboard.keyState[GLFW_KEY_S] - keyboard.keyState[GLFW_KEY_W]
-				);
+			);
 
 			if (moveInput.x != 0 || moveInput.y != 0 || moveInput.z != 0) {
-				camera.rePosition(camera.pos + moveDelta * (camera.orientation * glm::vec3(moveInput))); 
+				camera.rePosition(camera.pos + moveDelta * (camera.orientation * glm::vec3(moveInput)));
 			}
 
 		}
@@ -664,8 +697,7 @@ int run() {
 
 					int blades = patches[i].size * patches[i].size * patches[i].density;
 
-					glsl::GrassPatchConstants grassPatchConst;
-					{
+					glsl::GrassPatchConstants grassPatchConst; {
 						grassPatchConst.Position = patches[i].pos;
 						grassPatchConst.Size = patches[i].size;
 						grassPatchConst.MaxHeight = grassPatchMaxHeight;
@@ -723,27 +755,35 @@ int run() {
 
 
 		// Compute Shader Grass
-		auto csResult = renderTargetPool.acquire(ogl::TextureDesc::make2D(GL_TEXTURE_2D, GL_RGBA32F, screenDim.x, screenDim.y));
-		{
+		// auto csResult = renderTargetPool.acquire(ogl::TextureDesc::make2D(GL_TEXTURE_2D, GL_RGBA32F, screenDim.x, screenDim.y));
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, csResult);
+		GLuint clearColor = 0;
+		glClearTexImage(csResult, 0, GL_RGB, GL_FLOAT, &clearColor);
+		glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); {
 			glsl::CSGrassConstants csGrassConstants;
-			{
-				// Todo: sorted array of grid cells for front to back rendering
-				csGrassConstants.ScreenDim = screenDim;
-				csGrassConstants.GridStart = glm::vec3(0.0);
-				csGrassConstants.GridEnd = glm::vec3(40.0, 0.0, 40.0);
-				csGrassConstants.Step = 2.0;
-				csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
+			glm::vec3 gridStart = glm::vec3(0.0, 0.0, 0.0);
+			glm::vec3 gridEnd = glm::vec3(32.0, 0.0, 32.0);
+
+			glm::vec3 frontCells[32];
+
+			float step = 1;
+			int i = 0;
+			for (float x = gridStart.x; x < gridEnd.x; x += step) {
+				frontCells[i] = glm::vec3(x, gridStart.yz);
+				i++;
 			}
+			csGrassConstants.FtBDirection = camera.regGridDirection * step;
+			csGrassConstants.Step = step;
+			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
 
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
-			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 2);
-			// csResult.bind(GL_TEXTURE_2D, 2);
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, csResult);
-			glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
-			csGrassConstBuffer.bind(GL_UNIFORM_BUFFER, 3);
+			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 3);
+			csGrassConstBuffer.bind(GL_UNIFORM_BUFFER, 2);
 			computeShaderGrass.bind();
-			glDispatchCompute(512, 512, 1);
+			glUniform3fv(glGetUniformLocation(computeShaderGrass, "frontCells"),
+			                                 32, reinterpret_cast<GLfloat *>(&frontCells[0]));
+			glDispatchCompute(1, 1, 1);
 
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
@@ -754,7 +794,6 @@ int run() {
 
 			glDisable(GL_DEPTH_TEST);
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
-			csResult.bind(GL_TEXTURE_2D, 1);
 			nullVertexArrays.bind();
 			csResultShader.bind();
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -767,7 +806,7 @@ int run() {
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 			glDisable(GL_DEPTH_TEST);
-			camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
+			camConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
 			hdrTexture.bind(GL_TEXTURE_2D, 0);
 			nullVertexArrays.bind();
 			tonemapShader.bind();

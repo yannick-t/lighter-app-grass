@@ -2,11 +2,11 @@
 
 #include <renderer.glsl.h>
 
-layout(std140) uniform Camera
+layout(std140, binding = 1) uniform Camera
 {
 	CameraConstants camera;
 };
-layout(binding = 1) uniform sampler2D result;
+layout(binding = 0) uniform sampler2D result;
 
 #ifdef IN_VS
 
