@@ -18,7 +18,8 @@ layout(std140, binding = 2) uniform Grass
 {
 	CSGrassConstants grassConsts;
 };
-uniform vec3 frontCells[32];
+uniform vec3 frustumPlanePoints[6];
+uniform vec3 frustumPlaneNormals[6];
 
 #ifdef IN_CS
 layout(rgba32f, binding = 0) uniform image2D result;
@@ -26,16 +27,13 @@ layout(local_size_x = 32) in;
 
 void main()
 {
+	
+	
 	vec3 pos = frontCells[gl_LocalInvocationID.x];
-
 	
 	for(float i = 0; i < 32; i++) {
 		drawWorldPos(pos + i * grassConsts.FtBDirection, vec4(i / 31, 1.0, i / 31, 1.0));
 	 }
-
-	 drawWorldPos(vec3(0.0), vec4(1.0, 1.0, 1.0, 1.0));
-	 drawWorldPos(vec3(0.0, 0.0, 32.0), vec4(0.0, 0.0, 1.0, 1.0));
-	 drawWorldPos(vec3(32, 0.0, 0.0), vec4(1.0, 0.0, 0.0, 1.0));
 }
 
 void drawWorldPos(vec3 pos, vec4 colour) {

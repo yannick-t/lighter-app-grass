@@ -760,19 +760,12 @@ int run() {
 		glBindTexture(GL_TEXTURE_2D, csResult);
 		GLuint clearColor = 0;
 		glClearTexImage(csResult, 0, GL_RGB, GL_FLOAT, &clearColor);
-		glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); {
+		glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); 
+		{
 			glsl::CSGrassConstants csGrassConstants;
-			glm::vec3 gridStart = glm::vec3(0.0, 0.0, 0.0);
-			glm::vec3 gridEnd = glm::vec3(32.0, 0.0, 32.0);
-
-			glm::vec3 frontCells[32];
 
 			float step = 1;
 			int i = 0;
-			for (float x = gridStart.x; x < gridEnd.x; x += step) {
-				frontCells[i] = glm::vec3(x, gridStart.yz);
-				i++;
-			}
 			csGrassConstants.FtBDirection = camera.regGridDirection * step;
 			csGrassConstants.Step = step;
 			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
@@ -781,9 +774,7 @@ int run() {
 			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 3);
 			csGrassConstBuffer.bind(GL_UNIFORM_BUFFER, 2);
 			computeShaderGrass.bind();
-			glUniform3fv(glGetUniformLocation(computeShaderGrass, "frontCells"),
-			                                 32, reinterpret_cast<GLfloat *>(&frontCells[0]));
-			glDispatchCompute(1, 1, 1);
+			glDispatchCompute(screenDim.x / 32, screenDim.y / 32, 1);
 
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
