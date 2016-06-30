@@ -765,16 +765,17 @@ int run() {
 			glsl::CSGrassConstants csGrassConstants;
 
 			float step = 1;
-			int i = 0;
+			int tileDivisor = 128;
 			csGrassConstants.FtBDirection = camera.regGridDirection * step;
 			csGrassConstants.Step = step;
+			csGrassConstants.TileDivisor = tileDivisor;
 			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
 
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
 			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 3);
 			csGrassConstBuffer.bind(GL_UNIFORM_BUFFER, 2);
 			computeShaderGrass.bind();
-			glDispatchCompute(screenDim.x / 32, screenDim.y / 32, 1);
+			glDispatchCompute(screenDim.x / tileDivisor, screenDim.y / tileDivisor, 1);
 
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
