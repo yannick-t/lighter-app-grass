@@ -46,3 +46,9 @@ struct CSGrassConstants
 	int TileDivisor;
 	float Step;
 };
+
+struct Ray
+{
+	vec3 Start;
+	vec3 Dir;
+};
