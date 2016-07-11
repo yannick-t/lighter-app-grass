@@ -1,4 +1,5 @@
 ﻿#version 450 core
+#extension GL_NV_shader_thread_group : require
 
 #include <renderer.glsl.h>
 #include <random.glsl.h>
@@ -108,14 +109,10 @@ void main()
 		vec2 start = intersections[index].xz;
 
 		// Round to next cell position 
-		start = floor(start / grassConsts.Step) * vec2(grassConsts.Step); // (Todo: round to next visible quad?)
+		start =  floor(start / grassConsts.Step) * vec2(grassConsts.Step); // (Todo: round to next visible quad?)
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing to other intersection points
-		mat4 R = mat4(0.0,  0.0, 1.0, 0.0,									// Rotate 90 degrees on the around the Y axis
-						0.0,	1.0, 0.0, 0.0,
-						-1.0, 0.0, 0.0, 0.0,
-						0.0,  0.0, 0.0, 1.0);
-		vec3 startLineDir = vec3(R * vec4(grassConsts.FtBDirection, 1.0));
+		vec3 startLineDir = grassConsts.PerpFtBDir;
 		float dotSum = 0;													// If necessary mirror vector so it points roughly the right direction
 		for(int i = 0; i < intersectionCount; i++) {
 			if(i != index) {
@@ -145,23 +142,37 @@ void main()
 		}
 		float maxCellLength = ceil(maxLength / grassConsts.Step);
 
+
+		// split ftb vector up for iteration
+		vec3 ftbDirs[3];
+		int ftbDirCount = 0;
+		if(abs(grassConsts.FtBDirection.x) > Epsilon) {
+			ftbDirs[ftbDirCount] = vec3(grassConsts.FtBDirection.x, 0.0, 0.0);
+			ftbDirCount++;
+		} if(abs(grassConsts.FtBDirection.y) > Epsilon) {
+			ftbDirs[ftbDirCount] = vec3(0.0, grassConsts.FtBDirection.y, 0.0);
+			ftbDirCount++;
+		} if(abs(grassConsts.FtBDirection.z) > Epsilon) {
+			ftbDirs[ftbDirCount] = vec3(0.0, 0.0, grassConsts.FtBDirection.z);
+			ftbDirCount++;
+		}
 	
 		// Iterate through cells
 		// one thread for now
 		vec3 currentPos = vec3(start.x, 0.0, start.y);
 		bool newLine = true;
-		float lineNumber = 0;
+		int lineNumber = 0;
 		while(true) {
 			vec3 quad[4] = {currentPos, currentPos + vec3(grassConsts.Step, 0.0, 0.0), 
 							currentPos + vec3(0.0, 0.0, grassConsts.Step), currentPos + vec3(grassConsts.Step, 0.0, grassConsts.Step)};
 			bool inFrustum = !quadOutsideFrustum(quad, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
 			if(inFrustum) {
-				drawWorldPos(currentPos + vec3(grassConsts.Step / 2, 0.0, grassConsts.Step / 2), vec4(1.0 - lineNumber / maxCellLength, lineNumber / maxCellLength, 0.0, 1.0));
+				drawWorldPos(currentPos + vec3(grassConsts.Step / 2, 0.0, grassConsts.Step / 2), vec4(1.0 - float(lineNumber) / maxCellLength, float(lineNumber) / maxCellLength, 0.0, 1.0));
 				newLine = false;
 			} else if(!newLine) {
 				// Go to next line
 				startLineDir = -startLineDir;
-				currentPos += grassConsts.FtBDirection;
+				currentPos += ftbDirs[lineNumber % ftbDirCount];
 				frustumPlanesToCheck = negate(frustumPlanesToCheck);
 				newLine = true;
 				lineNumber++;

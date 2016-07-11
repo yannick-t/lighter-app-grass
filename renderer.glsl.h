@@ -44,6 +44,7 @@ struct CSGrassConstants
 {
 	vec3 FtBDirection;
 	int TileDivisor;
+	vec3 PerpFtBDir;
 	float Step;
 };
 

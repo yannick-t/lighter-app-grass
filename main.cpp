@@ -46,6 +46,7 @@ struct Camera {
 	glm::vec3 pos;
 	glm::mat3 orientation;
 	glm::vec3 regGridDirection;
+	glm::vec3 perpRegGridDirection;
 	float fov;
 	float aspect;
 	float nearPlane;
@@ -90,18 +91,25 @@ struct Camera {
 		// recalc reg grid direction
 		float angle = atan2(orientation[2].z, orientation[2].x);
 		int octant = static_cast<int>(roundf(8 * angle / (2 * M_PI) + 8)) % 8;
-		switch (octant) {
-		case 0: regGridDirection = glm::vec3(-1, 0, 0); break;
-		case 1: regGridDirection = glm::vec3(-1, 0, -1); break;
-		case 2: regGridDirection = glm::vec3(0, 0, -1); break;
-		case 3: regGridDirection = glm::vec3(1, 0, -1); break;
-		case 4: regGridDirection = glm::vec3(1, 0, 0); break;
-		case 5: regGridDirection = glm::vec3(1, 0, 1); break;
-		case 6: regGridDirection = glm::vec3(0, 0, 1); break;
-		case 7: regGridDirection = glm::vec3(-1, 0, 1); break;
-		}
+
+		regGridDirection = regGridDirectionFromOctant(octant);
+		perpRegGridDirection = regGridDirectionFromOctant((octant - 2) % 8);
 
 		recalcualteFrustum();
+	}
+
+	glm::vec3 regGridDirectionFromOctant(int octant) {
+		switch (octant) {
+			case 0: return glm::vec3(-1, 0, 0);
+			case 1: return glm::vec3(-1, 0, -1);
+			case 2: return glm::vec3(0, 0, -1);
+			case 3: return glm::vec3(1, 0, -1);
+			case 4: return glm::vec3(1, 0, 0); 
+			case 5: return glm::vec3(1, 0, 1);
+			case 6: return glm::vec3(0, 0, 1); 
+			case 7: return glm::vec3(-1, 0, 1); 
+			default: return glm::vec3(-1, 0, 1);
+		}
 	}
 
 	void rePosition(glm::vec3 pos) {
@@ -767,6 +775,7 @@ int run() {
 			float step = 1;
 			int tileDivisor = 128;
 			csGrassConstants.FtBDirection = camera.regGridDirection * step;
+			csGrassConstants.PerpFtBDir = camera.perpRegGridDirection * step;
 			csGrassConstants.Step = step;
 			csGrassConstants.TileDivisor = tileDivisor;
 			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
