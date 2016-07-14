@@ -163,26 +163,23 @@ void main()
 		// Iterate through cells
 		vec3 lineStart = vec3(start.x, 0.0, start.y);
 		vec3 currentPos = lineStart;
-		bool newLine = true;
 		int lineNumber = 0;
 		while(true) {
-			int maxIterations = 32;
-			int i = 0;
 			// Find suitable position for thread to draw at by checking if the currentPos is in the frustum and sharing that information with all threads
 			bool outOfFrustum = true;
 			bool done = false;
 			int prevLineIn = 0;
 			while(outOfFrustum) {
-				currentPos = currentPos + gl_LocalInvocationID.x * startLineDir;
+				currentPos = currentPos + (gl_LocalInvocationID.x - prevLineIn) * startLineDir;
 				vec3 quad[4] = {currentPos, currentPos + vec3(grassConsts.Step, 0.0, 0.0), 
 								currentPos + vec3(0.0, 0.0, grassConsts.Step), currentPos + vec3(grassConsts.Step, 0.0, grassConsts.Step)};
-				bool outOfFrustum = quadOutsideFrustum(quad, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
+				outOfFrustum = quadOutsideFrustum(quad, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
 
 				uint ballot = ballotThreadNV(outOfFrustum);
 				
 				if(outOfFrustum) {
 					int firstOut = findMSB(ballot);
-					currentPos = lineStart + (firstOut - prevLineIn) * startLineDir;
+					currentPos = lineStart + ((firstOut - 1) - prevLineIn) * startLineDir;
 					if((firstOut - prevLineIn) == 0 && prevLineIn != 0) {
 						// last line
 						done = true;
@@ -195,13 +192,7 @@ void main()
 					currentPos += ftbDirs[lineNumber % ftbDirCount];
 					lineStart = currentPos;
 					frustumPlanesToCheck = negate(frustumPlanesToCheck);
-					newLine = true;
 					lineNumber++;
-				}
-
-				i++;
-				if(i >= maxIterations) {
-					break;
 				}
 			}
 
