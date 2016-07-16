@@ -6,7 +6,7 @@
 
 const float Epsilon = 0.0000001;
 
-// shared volatile vec3 lastPosition;
+shared vec3 lastPosition;
 
 bool[6] negate(bool array[6]);
 float intersectPlane(Ray ray, vec3 point, vec3 normal);
@@ -178,7 +178,7 @@ void main()
 				uint ballot = ballotThreadNV(outOfFrustum);
 				
 				if(outOfFrustum) {
-					int firstOut = findMSB(ballot);
+					int firstOut = findLSB(ballot);
 					currentPos = lineStart + ((firstOut - 1) - prevLineIn) * startLineDir;
 					if((firstOut - prevLineIn) == 0 && prevLineIn != 0) {
 						// last line
