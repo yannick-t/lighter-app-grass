@@ -8,10 +8,15 @@ const float Epsilon = 0.0000001;
 
 shared vec3 lastPosition;
 
+bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir);
+vec3 floorGridPointByDir(vec3 point, vec3 dir);
 bool[6] negate(bool array[6]);
 float intersectPlane(Ray ray, vec3 point, vec3 normal);
+vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
+vec3 getPointOnFrustumPlane(int index, vec3 frustumPoints[8]);
 bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
 bool pointsOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 points[4]);
+bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point);
 void drawWorldPos(vec3 pos, vec4 colour);
 void drawNDC(vec3 ndc, vec4 colour);
 
@@ -32,7 +37,7 @@ layout(std140, binding = 2) uniform Grass
 
 #ifdef IN_CS
 layout(rgba32f, binding = 0) uniform image2D result;
-layout(local_size_x = 32) in;
+layout(local_size_x = 1) in;
 
 void main()
 {
@@ -95,7 +100,7 @@ void main()
 		}
 	}
 
-	if(intersectionCount > 3) {
+	if(intersectionCount > 3 && gl_GlobalInvocationID.x == 1 && gl_GlobalInvocationID.y == 1) {
 
 		// Find closest point to camera
 		float minDist = 1.0 / 0.0;
@@ -108,10 +113,10 @@ void main()
 				index = i;
 			}
 		}
-		vec2 start = intersections[index].xz;
+		vec3 start = intersections[index];
 
 		// Round to next cell position 
-		start =  floor(start / grassConsts.Step) * vec2(grassConsts.Step); // (Todo: round to next visible quad?)
+		start = floorGridPointByDir(start, grassConsts.FtBDirection);
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing to other intersection points
 		vec3 startLineDir = grassConsts.PerpFtBDir;
@@ -130,12 +135,9 @@ void main()
 		bool frustumPlanesToCheck[6];
 		for(int i = 0; i < 6; i++) {
 			frustumPlanesToCheck[i] = dot(startLineDir, frustumPlaneNormals[i]) >= 0;
+			// drawNDC(vec3(0.5 + float(i) / 24, 0.5, 0.5), vec4(frustumPlanesToCheck[i] ? 0.0 : 1.0, frustumPlanesToCheck[i] ? 1.0 : 0.0, 0.0, 1.0));
 		}
 
-		// Debug
-		for(int i = 0; i < intersectionCount; i++) {
-			drawWorldPos(intersections[i], vec4(0.0, 1.0, 1.0, 1.0)); // Draw intersection points
-		}
 		float maxLength = 0;
 		for(int i = 0; i < (intersectionCount - 1); i++) {
 			for(int j = i + 1; j < intersectionCount; j++) {
@@ -145,53 +147,116 @@ void main()
 		float maxCellLength = ceil(maxLength / grassConsts.Step);
 
 
-		// split ftb vector up for iteration
-		vec3 ftbDirs[3];
-		int ftbDirCount = 0;
-		if(abs(grassConsts.FtBDirection.x) > Epsilon) {
-			ftbDirs[ftbDirCount] = vec3(grassConsts.FtBDirection.x, 0.0, 0.0);
-			ftbDirCount++;
-		} if(abs(grassConsts.FtBDirection.y) > Epsilon) {
-			ftbDirs[ftbDirCount] = vec3(0.0, grassConsts.FtBDirection.y, 0.0);
-			ftbDirCount++;
-		} if(abs(grassConsts.FtBDirection.z) > Epsilon) {
-			ftbDirs[ftbDirCount] = vec3(0.0, 0.0, grassConsts.FtBDirection.z);
-			ftbDirCount++;
-		}
-	
+		// intersect with the frustum to get accurate start position
+		vec3 firstLine = intersectFrustum(Ray(start, -startLineDir), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
+		vec3 secondLine = intersectFrustum(Ray(start + grassConsts.FtBDirection, -startLineDir), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
+
+		// Debug
+		drawNDC(vec3(0.0, 0.0, 0.5), vec4(any(isinf(firstLine)) ? 0.0 : 1.0, any(isinf(firstLine)) ? 1.0 : 0.0, 0.0, 1.0));
+		drawNDC(vec3(0.1, 0.0, 0.5), vec4(any(isinf(secondLine)) ? 0.0 : 1.0, any(isinf(secondLine)) ? 1.0 : 0.0, 0.0, 1.0));
 		
+		for(int i = 0; i < 128; i++) {
+			vec3 a = intersectFrustum(Ray(start + float(i) * grassConsts.FtBDirection, -startLineDir), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
+			if(!any(isinf(a))) {
+				// drawWorldPos(a, vec4(0.5, 1.0, 0.0, 1.0));
+			}
+		}
+
+
+		if(gl_GlobalInvocationID.x == 1 && gl_GlobalInvocationID.y == 1) {
+			for(int i = 0; i < intersectionCount; i++) {
+				drawWorldPos(intersections[i], vec4(0.0, 1.0, 1.0, 1.0)); // Draw intersection points
+			}
+			drawWorldPos(start, vec4(1.0, 1.0, 1.0, 1.0));
+			drawWorldPos(start + grassConsts.FtBDirection, vec4(1.0, 1.0, 1.0, 1.0));
+			drawWorldPos(firstLine, vec4(1.0, 0.0, 0.0, 1.0));
+			drawWorldPos(secondLine, vec4(0.0, 1.0, 0.0, 1.0));
+		}
+
+		if(any(isinf(firstLine))) {
+			firstLine = start;
+		} else {
+			firstLine = floorGridPointByDir(firstLine, startLineDir);
+		}
+		secondLine = floorGridPointByDir(secondLine, startLineDir);
+	
+		/*
+		vec3 lineStart;
+		vec3 currentPos;
+		int i = 0;
+		int lineNumber = 0;
+		bool outOfFrustum = false;
+		for(; lineNumber < 256;) {
+			if(lessThanByDir(firstLine, secondLine, startLineDir)) {
+				lineStart = firstLine;	
+			} else {
+				lineStart = secondLine - grassConsts.FtBDirection;
+			}
+
+			currentPos = lineStart + i * startLineDir;
+			i++;
+			vec3 quad[4] = {currentPos, currentPos + vec3(grassConsts.Step, 0.0, 0.0), 
+							currentPos + vec3(0.0, 0.0, grassConsts.Step), currentPos + vec3(grassConsts.Step, 0.0, grassConsts.Step)};
+			outOfFrustum = quadOutsideFrustum(quad, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
+
+			if(!outOfFrustum) {
+				drawWorldPos(currentPos, vec4(1.0, 0.5, 0.5, 1.0));
+			} else if(i == 0 && lineNumber != 0) {
+				break;
+			} else {
+				// Go to next line
+				firstLine = secondLine;
+				secondLine = currentPos + grassConsts.FtBDirection;
+				secondLine = intersectFrustum(Ray(lineStart, -startLineDir), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
+				secondLine = floorGridPointByDir(secondLine, startLineDir);
+				i = 0;
+				lineNumber++;
+			}
+		}
+
+
+		/*
+
 		// Iterate through cells
-		vec3 lineStart = vec3(start.x, 0.0, start.y);
-		vec3 currentPos = lineStart;
+		vec3 lineStart;
+		vec3 currentPos;
 		int lineNumber = 0;
 		while(true) {
 			// Find suitable position for thread to draw at by checking if the currentPos is in the frustum and sharing that information with all threads
 			bool outOfFrustum = true;
 			bool done = false;
 			int prevLineIn = 0;
+			int threadsIn = 0;
 			while(outOfFrustum) {
-				currentPos = currentPos + (gl_LocalInvocationID.x - prevLineIn) * startLineDir;
+				if(lessThanByDir(firstLine, secondLine, startLineDir)) {
+					lineStart = firstLine;	
+				} else {
+					lineStart = secondLine - ftbDirs[0];
+				}
+
+				currentPos = lineStart + (gl_LocalInvocationID.x - threadsIn) * startLineDir;
 				vec3 quad[4] = {currentPos, currentPos + vec3(grassConsts.Step, 0.0, 0.0), 
 								currentPos + vec3(0.0, 0.0, grassConsts.Step), currentPos + vec3(grassConsts.Step, 0.0, grassConsts.Step)};
 				outOfFrustum = quadOutsideFrustum(quad, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
 
-				uint ballot = ballotThreadNV(outOfFrustum);
+				uint ballot = ballotThreadNV(outOfFrustum) >> threadsIn;
 				
 				if(outOfFrustum) {
 					int firstOut = findLSB(ballot);
-					currentPos = lineStart + ((firstOut - 1) - prevLineIn) * startLineDir;
-					if((firstOut - prevLineIn) == 0 && prevLineIn != 0) {
+					if(firstOut == 0 && prevLineIn != 0) {
 						// last line
 						done = true;
 						break;
 					}
 					prevLineIn = firstOut;
+					threadsIn += firstOut;
+
 
 					// Go to next line
-					startLineDir = -startLineDir;
-					currentPos += ftbDirs[lineNumber % ftbDirCount];
-					lineStart = currentPos;
-					frustumPlanesToCheck = negate(frustumPlanesToCheck);
+					firstLine = secondLine;
+					secondLine = currentPos + ftbDirs[lineNumber % ftbDirCount];
+					secondLine = intersectFrustum(Ray(lineStart, -startLineDir), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
+					secondLine = floorGridPointByDir(secondLine, startLineDir);
 					lineNumber++;
 				}
 			}
@@ -200,12 +265,38 @@ void main()
 				break;
 			}
 
-			drawWorldPos(currentPos + vec3(grassConsts.Step / 2, 0.0, grassConsts.Step / 2), vec4(1.0 - float(lineNumber) / maxCellLength, float(lineNumber) / maxCellLength, gl_LocalInvocationID.x / 32, 1.0));
+			// drawWorldPos(currentPos + vec3(grassConsts.Step / 2, 0.0, grassConsts.Step / 2), vec4(1.0 - float(lineNumber) / maxCellLength, float(lineNumber) / maxCellLength, gl_LocalInvocationID.x / 32, 1.0));
+			drawWorldPos(currentPos + vec3(grassConsts.Step / 2, 0.0, grassConsts.Step / 2), vec4(1.0, 0.5, 0.5, 1.0));
 
 			// Todo: next 32
 			break;
-		}
+		}*/
 	}
+}
+
+bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir) {
+	bool result = false;
+	if(dot(snd - fst, dir) > 0) {
+		result = true;
+	}
+	return result;
+}
+
+vec3 floorGridPointByDir(vec3 point, vec3 dir) {
+	vec3 result = vec3(0.0);
+	// floors point to grid point in the opposite direction of dir 
+	if(dir.x > 0) {
+		result.x = floor(point.x / grassConsts.Step) * grassConsts.Step;
+	} else {
+		result.x = ceil(point.x / grassConsts.Step) * grassConsts.Step;
+	}
+	if(dir.z > 0) {
+		result.z = floor(point.z / grassConsts.Step) * grassConsts.Step;
+	} else {
+		result.z = ceil(point.z / grassConsts.Step) * grassConsts.Step;
+	}
+
+	return result;
 }
 
 bool[6] negate(bool array[6]) {
@@ -227,19 +318,63 @@ float intersectPlane(Ray ray, vec3 point, vec3 normal) {
 	return t;
 }
 
+vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]) {
+	vec3 intersection = vec3(1.0 / 0.0);
+	bool inFrustum = true;
+	for(int i = 0; i < 6; i++) {
+		if(!whichPlanes[i]) {
+			continue;
+		}
+
+		float t = intersectPlane(ray, getPointOnFrustumPlane(i, frustumPoints), frustumPlaneNormals[i]);
+		intersection = ray.Start + t * ray.Dir;
+		
+
+		// test if intersection is in the frustum
+		inFrustum = true;
+		int dontCheck = i + ((i % 2 == 1) ? -1 : 1);// plane index opposite of current plane
+		for(int j = 0; j < 6; j++) {
+			if(j == i || j == dontCheck) {
+				continue;
+			}
+
+			if(pointOutsideOfPlane(frustumPlaneNormals[j], getPointOnFrustumPlane(j, frustumPoints), intersection)) {
+				inFrustum = false;
+				break;
+			}
+		}
+
+		drawWorldPos(intersection, vec4(inFrustum ? 0.0 : 1.0, inFrustum ? 1.0 : 0.0, 0.0, 1.0));
+
+		if(inFrustum) {
+			break;
+		}
+	}
+
+	if(inFrustum) {
+		return intersection;
+	} else {
+		return vec3(1.0/0.0);
+	}
+}
+
+vec3 getPointOnFrustumPlane(int index, vec3 frustumPoints[8]) {
+	vec3 point = camera.CamPos;
+	if(index == 4) {
+		point = frustumPoints[0];
+	} else if(index == 5) {
+		point = frustumPoints[4];
+	}
+	return point;
+}
+
 bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]) {
 	bool outside = false;
 	for(int i = 0; i < 6; i++) {
 		if(!whichPlanes[i]) {
 			continue;
 		}
-		vec3 point = camera.CamPos;
-		if(i == 4) {
-			point = frustumPoints[0];
-		} else if(i == 5) {
-			point = frustumPoints[4];
-		}
-		outside = pointsOutsideOfPlane(point, frustumPlaneNormals[i], points);
+		outside = pointsOutsideOfPlane(point, frustumPlaneNormals[i], getPointOnFrustumPlane(i, frustumPoints));
 		if(outside) {
 			break;
 		}
@@ -251,11 +386,15 @@ bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNo
 bool pointsOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 points[4]) {
 	// outside == on the side of the normal
 	for (int i = 0; i < 4; i++) {
-		if (dot(planeNormal, points[i] - planePoint) < 0) {
+		if (!pointOutsideOfPlane(planePoint, planeNormal, points[i])) {
 			return false;
 		}
 	}
 	return true;
+}
+
+bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point) {
+	return dot(planeNormal, point - planePoint) >= 0;
 }
 
 void drawWorldPos(vec3 pos, vec4 colour) {

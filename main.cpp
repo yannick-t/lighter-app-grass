@@ -45,8 +45,11 @@ struct Camera {
 
 	glm::vec3 pos;
 	glm::mat3 orientation;
+
 	glm::vec3 regGridDirection;
 	glm::vec3 perpRegGridDirection;
+	bool regGridDirDiagonal;
+
 	float fov;
 	float aspect;
 	float nearPlane;
@@ -94,6 +97,7 @@ struct Camera {
 
 		regGridDirection = regGridDirectionFromOctant(octant);
 		perpRegGridDirection = regGridDirectionFromOctant((octant - 2) % 8);
+		regGridDirDiagonal = octant % 2 == 1;
 
 		recalcualteFrustum();
 	}
@@ -775,6 +779,9 @@ int run() {
 			float step = 1;
 			int tileDivisor = 128;
 			csGrassConstants.FtBDirection = camera.regGridDirection * step;
+			if (camera.regGridDirDiagonal) {
+				csGrassConstants.FtBDirection /= 2;
+			}
 			csGrassConstants.PerpFtBDir = camera.perpRegGridDirection * step;
 			csGrassConstants.Step = step;
 			csGrassConstants.TileDivisor = tileDivisor;
