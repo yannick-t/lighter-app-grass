@@ -13,10 +13,11 @@ vec3 floorGridPointByDir(vec3 point, vec3 dir);
 bool[6] negate(bool array[6]);
 float intersectPlane(Ray ray, vec3 point, vec3 normal);
 vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
+bool pointInFrustum(vec3 point, vec3 frustumPoints[8]);
 vec3 getPointOnFrustumPlane(int index, vec3 frustumPoints[8]);
 bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
 bool pointsOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 points[4]);
-bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point);
+bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point, float epsilon);
 void drawWorldPos(vec3 pos, vec4 colour);
 void drawNDC(vec3 ndc, vec4 colour);
 
@@ -162,6 +163,8 @@ void main()
 			}
 		}
 
+		bool inFrustum = pointInFrustum(vec3(0.0), frustumPoints);
+		drawWorldPos(vec3(0.0), vec4(inFrustum ? 0.0 : 1.0, inFrustum ? 1.0 : 0.0, 0.0, 1.0));
 
 		if(gl_GlobalInvocationID.x == 1 && gl_GlobalInvocationID.y == 1) {
 			for(int i = 0; i < intersectionCount; i++) {
@@ -331,24 +334,26 @@ vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6],
 		
 
 		// test if intersection is in the frustum
-		inFrustum = true;
+		inFrustum = pointInFrustum(intersection, frustumPoints);
+		/*
 		int dontCheck = i + ((i % 2 == 1) ? -1 : 1);// plane index opposite of current plane
 		for(int j = 0; j < 6; j++) {
 			if(j == i || j == dontCheck) {
 				continue;
 			}
 
-			if(pointOutsideOfPlane(frustumPlaneNormals[j], getPointOnFrustumPlane(j, frustumPoints), intersection)) {
+			if(pointOutsideOfPlane(frustumPlaneNormals[j], getPointOnFrustumPlane(j, frustumPoints), intersection, Epsilon)) {
 				inFrustum = false;
 				break;
 			}
-		}
+		}*/
 
 		drawWorldPos(intersection, vec4(inFrustum ? 0.0 : 1.0, inFrustum ? 1.0 : 0.0, 0.0, 1.0));
 
+		/*
 		if(inFrustum) {
 			break;
-		}
+		}*/
 	}
 
 	if(inFrustum) {
@@ -356,6 +361,12 @@ vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6],
 	} else {
 		return vec3(1.0/0.0);
 	}
+}
+
+bool pointInFrustum(vec3 point, vec3 frustumPoints[8]) {
+	float d1 = dot(frustumPoints[7] - frustumPoints[0], point - frustumPoints[0]);
+	float d2 = dot(frustumPoints[0] - frustumPoints[7], point - frustumPoints[7]);
+	return d1 >= (0.5 + Epsilon) && d2 >= (0.5 + Epsilon);
 }
 
 vec3 getPointOnFrustumPlane(int index, vec3 frustumPoints[8]) {
@@ -374,7 +385,7 @@ bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNo
 		if(!whichPlanes[i]) {
 			continue;
 		}
-		outside = pointsOutsideOfPlane(point, frustumPlaneNormals[i], getPointOnFrustumPlane(i, frustumPoints));
+		outside = pointsOutsideOfPlane(getPointOnFrustumPlane(i, frustumPoints), frustumPlaneNormals[i], points);
 		if(outside) {
 			break;
 		}
@@ -386,15 +397,15 @@ bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNo
 bool pointsOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 points[4]) {
 	// outside == on the side of the normal
 	for (int i = 0; i < 4; i++) {
-		if (!pointOutsideOfPlane(planePoint, planeNormal, points[i])) {
+		if (!pointOutsideOfPlane(planePoint, planeNormal, points[i], 0.0)) {
 			return false;
 		}
 	}
 	return true;
 }
 
-bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point) {
-	return dot(planeNormal, point - planePoint) >= 0;
+bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point, float epsilon) {
+	return dot(planeNormal, point - (planePoint + epsilon * planeNormal)) >= 0;
 }
 
 void drawWorldPos(vec3 pos, vec4 colour) {
@@ -408,8 +419,13 @@ void drawNDC(vec3 ndc, vec4 colour) {
 	vec2 texCoords = vec2(screenCoords.x, 1.0 - screenCoords.y);
 	if(0.0 <= texCoords.x && texCoords.x <= 1.0 &&
 		0.0 <= texCoords.y && texCoords.y <= 1.0 &&
-		ndc.z >= -0.000001 && ndc.z <= 1.00001) {
-		imageStore(result, ivec2(texCoords * imageSize(result)), colour);
+		ndc.z >= -0.0 && ndc.z <= 1.0) {
+
+		ivec2 imagePos = ivec2(texCoords * imageSize(result));
+		imageStore(result, imagePos, colour);
+		imageStore(result, imagePos + ivec2(0, 1), colour);
+		imageStore(result, imagePos + ivec2(1, 0), colour);
+		imageStore(result, imagePos + ivec2(1, 1), colour);
 	}
 }
 
