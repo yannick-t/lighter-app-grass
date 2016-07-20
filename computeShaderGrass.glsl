@@ -4,7 +4,7 @@
 #include <renderer.glsl.h>
 #include <random.glsl.h>
 
-const float Epsilon = 0.0000001;
+const float Epsilon = 0.001;
 
 shared vec3 lastPosition;
 
@@ -13,7 +13,6 @@ vec3 floorGridPointByDir(vec3 point, vec3 dir);
 bool[6] negate(bool array[6]);
 float intersectPlane(Ray ray, vec3 point, vec3 normal);
 vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
-bool pointInFrustum(vec3 point, vec3 frustumPoints[8]);
 vec3 getPointOnFrustumPlane(int index, vec3 frustumPoints[8]);
 bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
 bool pointsOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 points[4]);
@@ -155,16 +154,7 @@ void main()
 		// Debug
 		drawNDC(vec3(0.0, 0.0, 0.5), vec4(any(isinf(firstLine)) ? 0.0 : 1.0, any(isinf(firstLine)) ? 1.0 : 0.0, 0.0, 1.0));
 		drawNDC(vec3(0.1, 0.0, 0.5), vec4(any(isinf(secondLine)) ? 0.0 : 1.0, any(isinf(secondLine)) ? 1.0 : 0.0, 0.0, 1.0));
-		
-		for(int i = 0; i < 128; i++) {
-			vec3 a = intersectFrustum(Ray(start + float(i) * grassConsts.FtBDirection, -startLineDir), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
-			if(!any(isinf(a))) {
-				// drawWorldPos(a, vec4(0.5, 1.0, 0.0, 1.0));
-			}
-		}
 
-		bool inFrustum = pointInFrustum(vec3(0.0), frustumPoints);
-		drawWorldPos(vec3(0.0), vec4(inFrustum ? 0.0 : 1.0, inFrustum ? 1.0 : 0.0, 0.0, 1.0));
 
 		if(gl_GlobalInvocationID.x == 1 && gl_GlobalInvocationID.y == 1) {
 			for(int i = 0; i < intersectionCount; i++) {
@@ -183,13 +173,17 @@ void main()
 		}
 		secondLine = floorGridPointByDir(secondLine, startLineDir);
 	
-		/*
+		
 		vec3 lineStart;
 		vec3 currentPos;
 		int i = 0;
 		int lineNumber = 0;
 		bool outOfFrustum = false;
 		for(; lineNumber < 256;) {
+			if(any(isinf(firstLine))) {
+				break;
+			}
+
 			if(lessThanByDir(firstLine, secondLine, startLineDir)) {
 				lineStart = firstLine;	
 			} else {
@@ -204,13 +198,12 @@ void main()
 
 			if(!outOfFrustum) {
 				drawWorldPos(currentPos, vec4(1.0, 0.5, 0.5, 1.0));
-			} else if(i == 0 && lineNumber != 0) {
-				break;
 			} else {
 				// Go to next line
 				firstLine = secondLine;
 				secondLine = currentPos + grassConsts.FtBDirection;
 				secondLine = intersectFrustum(Ray(lineStart, -startLineDir), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
+				drawWorldPos(secondLine, vec4(0.5,0.0,1.0,1.0));
 				secondLine = floorGridPointByDir(secondLine, startLineDir);
 				i = 0;
 				lineNumber++;
@@ -331,29 +324,25 @@ vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6],
 
 		float t = intersectPlane(ray, getPointOnFrustumPlane(i, frustumPoints), frustumPlaneNormals[i]);
 		intersection = ray.Start + t * ray.Dir;
-		
 
 		// test if intersection is in the frustum
-		inFrustum = pointInFrustum(intersection, frustumPoints);
-		/*
+		inFrustum = true;
 		int dontCheck = i + ((i % 2 == 1) ? -1 : 1);// plane index opposite of current plane
 		for(int j = 0; j < 6; j++) {
 			if(j == i || j == dontCheck) {
 				continue;
 			}
 
-			if(pointOutsideOfPlane(frustumPlaneNormals[j], getPointOnFrustumPlane(j, frustumPoints), intersection, Epsilon)) {
+			if(pointOutsideOfPlane(getPointOnFrustumPlane(j, frustumPoints), frustumPlaneNormals[j], intersection, Epsilon)) {
 				inFrustum = false;
 				break;
 			}
-		}*/
+		}
 
-		drawWorldPos(intersection, vec4(inFrustum ? 0.0 : 1.0, inFrustum ? 1.0 : 0.0, 0.0, 1.0));
-
-		/*
+		// drawWorldPos(intersection, vec4(inFrustum ? 0.0 : 1.0, inFrustum ? 1.0 : 0.0, 0.0, 1.0));
 		if(inFrustum) {
 			break;
-		}*/
+		}
 	}
 
 	if(inFrustum) {
@@ -361,12 +350,6 @@ vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6],
 	} else {
 		return vec3(1.0/0.0);
 	}
-}
-
-bool pointInFrustum(vec3 point, vec3 frustumPoints[8]) {
-	float d1 = dot(frustumPoints[7] - frustumPoints[0], point - frustumPoints[0]);
-	float d2 = dot(frustumPoints[0] - frustumPoints[7], point - frustumPoints[7]);
-	return d1 >= (0.5 + Epsilon) && d2 >= (0.5 + Epsilon);
 }
 
 vec3 getPointOnFrustumPlane(int index, vec3 frustumPoints[8]) {
