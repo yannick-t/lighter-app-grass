@@ -14,6 +14,7 @@ bool[6] negate(bool array[6]);
 float intersectPlane(Ray ray, vec3 point, vec3 normal);
 vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
 vec3 getPointOnFrustumPlane(int index, vec3 frustumPoints[8]);
+bool gridCellOutsideFrustum(vec3 center, float size, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
 bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
 bool pointsOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 points[4]);
 bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point, float epsilon);
@@ -162,34 +163,31 @@ void main()
 		vec3 lineStart;
 		vec3 currentPos;
 		bool outOfFrustum = false;
-		for(int lineNumber = 0; lineNumber < 128; lineNumber++) {
+		for(int lineNumber = 0;; lineNumber++) {
 			vec3 sL = line + grassConsts.FtBDirection;
 			sL = intersectFrustum(Ray(sL, -startLineDir), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
-			// drawWorldPos(sL, vec4(0.5,0.0,1.0,1.0));
 			secondLine = floorGridPointByDir(sL, startLineDir);
-			drawWorldPos(secondLine, vec4(0.5,0.0,1.0,1.0));
 
-			if(lessThanByDir(firstLine, secondLine, startLineDir)) {
-				lineStart = firstLine;	
+			// Check if the intersection of the next line indicates that there are more cells of the line in the frustum
+			if(lessThanByDir(firstLine, secondLine, startLineDir)) { // Todo: check if neccesary
+				lineStart = firstLine;
 			} else {
-				lineStart = secondLine - grassConsts.FtBDirection;
+				lineStart = floorGridPointByDir(secondLine - grassConsts.FtBDirection, startLineDir);
 			}
-			lineStart = firstLine;
 
 			if(!any(isinf(lineStart))) {
-				drawWorldPos(lineStart, vec4(1.0,1.0,1.0,1.0));
 				currentPos = lineStart;
 				outOfFrustum = false;
 				while(!outOfFrustum) {
-					vec3 quad[4] = {currentPos + vec3(-grassConsts.Step, 0.0, -grassConsts.Step) / 2, currentPos + vec3(-grassConsts.Step, 0.0, grassConsts.Step) / 2, 
-									currentPos + vec3(grassConsts.Step, 0.0, -grassConsts.Step) / 2, currentPos + vec3(grassConsts.Step, 0.0, grassConsts.Step) / 2};
-					outOfFrustum = quadOutsideFrustum(quad, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
+					outOfFrustum = gridCellOutsideFrustum(currentPos, grassConsts.Step, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
 
 					if(!outOfFrustum) {
 						drawWorldPos(currentPos, vec4(1.0, 0.5, 0.5, 1.0));
 					}
 					currentPos += startLineDir;
 				}
+			} else if (lineNumber > 1) {
+				break;
 			}
 
 			// next line
@@ -259,8 +257,12 @@ void main()
 
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir) {
 	bool result = false;
-	if(dot(snd - fst, dir) > 0) {
+	if(any(isinf(fst)) || any(isinf(snd))) {
 		result = true;
+	} else {
+		if(dot(snd - fst, dir) > 0) {
+			result = true;
+		} 
 	}
 	return result;
 }
@@ -351,6 +353,12 @@ vec3 getPointOnFrustumPlane(int index, vec3 frustumPoints[8]) {
 		point = frustumPoints[4];
 	}
 	return point;
+}
+
+bool gridCellOutsideFrustum(vec3 center, float size, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]) {
+	vec3 quad[4] = {center + vec3(-size, 0.0, -size) / 2, center + vec3(-size, 0.0, size) / 2,
+					center + vec3(size, 0.0, -size) / 2, center + vec3(size, 0.0, size) / 2};
+	return quadOutsideFrustum(quad, whichPlanes, frustumPlaneNormals, frustumPoints);
 }
 
 bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]) {
