@@ -156,6 +156,9 @@ void main()
 
 
 		// Iterate through cells
+		int i = 0;
+		int maxIt = 1000;
+
 		int lineNumber;
 		vec3 line = start;
 		vec3 firstLine = start;
@@ -167,7 +170,7 @@ void main()
 		int prevLineIn;
 		int threadsIn;
 		uint ballot;
-		for(int i = 0; i < 1; i++) {
+		for(;;) {
 			// Find suitable position for thread to draw at by checking if the currentPos is in the frustum and sharing that information with all threads
 			outOfFrustum = true;
 			done = false;
@@ -218,6 +221,12 @@ void main()
 				} else if (gl_LocalInvocationID.x == 31) {
 					// last thread found position to draw at
 					lastPosition = currentPos + startLineDir;
+				}
+
+				i++;
+				if(i >= maxIt) {
+					done = true;
+					break;
 				}
 			}
 

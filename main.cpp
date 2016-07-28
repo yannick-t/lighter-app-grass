@@ -776,8 +776,8 @@ int run() {
 		{
 			glsl::CSGrassConstants csGrassConstants;
 
-			float step = 1;
-			int tileDivisor = 128;
+			float step = 0.1;
+			int tileDivisor = 32;
 			csGrassConstants.FtBDirection = camera.regGridDirection * step;
 			if (camera.regGridDirDiagonal) {
 				csGrassConstants.FtBDirection /= 2;
