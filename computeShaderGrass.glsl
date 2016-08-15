@@ -9,8 +9,10 @@ const float Epsilon = 0.001;
 
 shared vec3 lastPosition;
 
+float getStepSize(vec3 pos);
+float distPointLine(vec3 a, vec3 d, vec3 point);
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir);
-vec3 floorGridPointByDir(vec3 point, vec3 dir);
+vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize);
 bool[6] negate(bool array[6]);
 float intersectPlane(Ray ray, vec3 point, vec3 normal);
 vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
@@ -104,21 +106,21 @@ void main()
 
 	if(intersectionCount > 3/* && gl_WorkGroupID.x == 2 && gl_WorkGroupID.y == 1*/) {
 
-		// Find closest point to camera
-		float minDist = 1.0 / 0.0;
-		int index = 0;
-		for(int i = 0; i < intersectionCount; i++) {
+		float stepSize = grassConsts.Step;
 
-			float d = length(camera.CamPos - intersections[i]);
-			if(d < minDist) {
-				minDist = d;
+		// Find start point for iteration (minimum by ftb)
+		int index = 0;
+		for(int i = 1; i < intersectionCount; i++) {
+
+			if(lessThanByDir(intersections[i], intersections[index], grassConsts.FtBDirection)) {
 				index = i;
 			}
 		}
 		vec3 start = intersections[index];
 
+		stepSize = getStepSize(start);
 		// Round to next cell position 
-		start = floorGridPointByDir(start, grassConsts.FtBDirection);
+		start = floorGridPointByDir(start, grassConsts.FtBDirection, stepSize);
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing to other intersection points
 		vec3 startLineDir = grassConsts.PerpFtBDir;
@@ -140,14 +142,6 @@ void main()
 			// drawNDC(vec3(0.5 + float(i) / 24, 0.5, 0.5), vec4(frustumPlanesToCheck[i] ? 0.0 : 1.0, frustumPlanesToCheck[i] ? 1.0 : 0.0, 0.0, 1.0));
 		}
 
-		float maxLength = 0;
-		for(int i = 0; i < (intersectionCount - 1); i++) {
-			for(int j = i + 1; j < intersectionCount; j++) {
-				maxLength = max(maxLength, distance(intersections[i], intersections[j]));
-			}
-		}
-		float maxCellLength = ceil(maxLength / grassConsts.Step);
-
 
 		// debug
 		for(int i = 0; i < intersectionCount; i++) {
@@ -157,9 +151,11 @@ void main()
 
 		// Iterate through cells
 		int i = 0;
-		int maxIt = 1000;
+		int maxIt = 100;
 
-		int lineNumber;
+		vec3 ftb = grassConsts.FtBDirection * stepSize;
+		vec3 startLine = startLineDir * stepSize;
+		int lineNumber = 0;
 		vec3 line = start;
 		vec3 firstLine = start;
 		vec3 secondLine;
@@ -176,33 +172,38 @@ void main()
 			done = false;
 			prevLineIn = 0;
 			threadsIn = 0;
-			lineNumber = 0;
+			// lineNumber = 0;
 			ballot = 0;
 
 			while(outOfFrustum) {
 				// Intersect with frustum to find next line
-				vec3 sL = line + grassConsts.FtBDirection;
-				sL = intersectFrustum(Ray(sL, -startLineDir), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
-				secondLine = floorGridPointByDir(sL, startLineDir);
+				vec3 sL = line + ftb;
+				sL = intersectFrustum(Ray(sL, -startLine), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
+				secondLine = floorGridPointByDir(sL, startLine, stepSize);
+
+				// Calculate step size
+				stepSize = getStepSize(sL);
+				ftb = grassConsts.FtBDirection * stepSize;
+				startLine = startLineDir * stepSize;
 
 
 				// Check if the intersection of the next line indicates that there are more cells of the line in the frustum
 				if(lessThanByDir(firstLine, secondLine, startLineDir)) { // Todo: check if neccesary (more than one cell difference (diagonal?))
 					lineStart = firstLine;
 				} else {
-					lineStart = floorGridPointByDir(secondLine - grassConsts.FtBDirection, startLineDir);
+					lineStart = floorGridPointByDir(secondLine - ftb, startLine, stepSize);
 				}
-				lineStart = firstLine;
+				// lineStart = firstLine;
 
 
 				// Check if position is in frustum and share with other threads
 				if(!any(isinf(lineStart))) {
 					// Find thread position
-					currentPos = lineStart + (gl_LocalInvocationID.x - prevLineIn) * startLineDir;
+					currentPos = lineStart + (gl_LocalInvocationID.x - prevLineIn) * startLine;
 					// Check if in frustum
-					outOfFrustum = gridCellOutsideFrustum(currentPos, grassConsts.Step, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
+					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
 					ballot = ballotThreadNV(outOfFrustum);
-				} else if(lineNumber > 1) {
+				} else if(lineNumber > 2) {
 					done = true;
 					break;
 				}
@@ -215,12 +216,12 @@ void main()
 					prevLineIn = firstOut;
 
 					// next line
-					line += grassConsts.FtBDirection;
+					line += ftb;
 					firstLine = secondLine;
 					lineNumber++;
 				} else if (gl_LocalInvocationID.x == 31) {
 					// last thread found position to draw at
-					lastPosition = currentPos + startLineDir;
+					lastPosition = currentPos + startLine;
 				}
 
 				i++;
@@ -235,7 +236,7 @@ void main()
 			}
 
 			// found position -> draw
-			drawWorldPos(currentPos + vec3(grassConsts.Step / 2, 0.0, grassConsts.Step / 2), vec4(1.0 - float(lineNumber) / maxCellLength, float(lineNumber) / maxCellLength, gl_LocalInvocationID.x / 32, 1.0));
+			drawWorldPos(currentPos, vec4(1.0, 0.0, gl_LocalInvocationID.x / 32, 1.0));
 
 
 			// get position of last thread to find the next cells to draw at
@@ -244,6 +245,24 @@ void main()
 			line = lastPosition;
 		}
 	}
+}
+
+// Get step size for regular grid by position representing the line currently worked on
+float getStepSize(vec3 pos) {
+	float dist = length(pos - camera.CamPos); //distPointLine(pos, grassConsts.PerpFtBDir, camera.CamPos);
+	float factor = ((dist - grassConsts.StepDist) / 2); //grassConsts.StepDoubleDist;
+	
+	if(factor < 1) {
+		factor = 1;
+	} else {
+		factor = pow(2, log2(int(factor + 1)));
+	}
+	return factor * grassConsts.Step;
+}
+
+float distPointLine(vec3 a, vec3 d, vec3 point) {
+	vec3 pud = ((d * (point - a)) / length(d)) * d; // projection
+	return length(point - (a + pud));
 }
 
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir) {
@@ -258,21 +277,21 @@ bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir) {
 	return result;
 }
 
-vec3 floorGridPointByDir(vec3 point, vec3 dir) {
+vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize) {
 	vec3 result = vec3(0.0);
 	if(any(isinf(point))) {
 		result = vec3(1.0 / 0.0);
 	} else {
 		// floors point to grid point in the opposite direction of dir 
 		if(dir.x > 0) {
-			result.x = floor(point.x / grassConsts.Step) * grassConsts.Step;
+			result.x = floor(point.x / stepSize) * stepSize;
 		} else {
-			result.x = ceil(point.x / grassConsts.Step) * grassConsts.Step;
+			result.x = ceil(point.x / stepSize) * stepSize;
 		}
 		if(dir.z > 0) {
-			result.z = floor(point.z / grassConsts.Step) * grassConsts.Step;
+			result.z = floor(point.z / stepSize) * stepSize;
 		} else {
-			result.z = ceil(point.z / grassConsts.Step) * grassConsts.Step;
+			result.z = ceil(point.z / stepSize) * stepSize;
 		}
 	}
 

@@ -346,15 +346,6 @@ void addAndSubdivide(float x, float z, float size, float density, Camera camera,
 
 	if (camera.quadInFrustum(points)) {
 		// patch + subpatches
-		/*
-		if (relativeFootprint < 0) {
-			// calc footprint
-			
-			std::vector<glm::vec3> ndcPoints(4);
-			camera.pointsToNDC(points, ndcPoints);
-
-			relativeFootprint = camera.computeFootprintNDCQuad(ndcPoints) / camera.maxFootprint;
-		}*/
 
 		GrassPatch patch;
 		patch.pos = glm::vec3(x, 0.0, z);
@@ -466,7 +457,7 @@ int run() {
 
 	auto csGrassConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CSGrassConstants));
 
-	// Compute Shader Grass result
+	// Compute Shader Grass
 	GLuint csResult;
 	glGenTextures(1, &csResult);
 	glActiveTexture(GL_TEXTURE0);
@@ -477,6 +468,11 @@ int run() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
+	float stepDistFactor = (glm::length(camera.nearPoints[0] - camera.nearPoints[1]) / glm::length(camera.farPoints[0] - camera.farPoints[1]) - 1) / (camera.farPlane - camera.nearPlane);
+	// calc dist for horizontal length at normal dist to need to double to be the same length on the screen
+	float stepNormalDist = 2;
+	float stepDoubleDist = abs((2 * stepNormalDist + 1 / stepDistFactor) - stepNormalDist);
+	
 
 	// load environment map
 	ogl::Texture envMap = nullptr; {
@@ -778,12 +774,15 @@ int run() {
 
 			float step = 0.1;
 			int tileDivisor = 32;
-			csGrassConstants.FtBDirection = camera.regGridDirection * step;
+			csGrassConstants.FtBDirection = camera.regGridDirection;
 			if (camera.regGridDirDiagonal) {
 				csGrassConstants.FtBDirection /= 2;
 			}
-			csGrassConstants.PerpFtBDir = camera.perpRegGridDirection * step;
+			csGrassConstants.PerpFtBDir = camera.perpRegGridDirection;
 			csGrassConstants.Step = step;
+			csGrassConstants.StepDist = stepNormalDist;
+			csGrassConstants.StepDoubleDist = stepDoubleDist;
+			// std::cout << stepDoubleDist << std::endl;
 			csGrassConstants.TileDivisor = tileDivisor;
 			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
 
