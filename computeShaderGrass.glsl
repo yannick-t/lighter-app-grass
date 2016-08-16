@@ -10,6 +10,7 @@ const float Epsilon = 0.001;
 shared vec3 lastPosition;
 
 float getStepSize(vec3 pos);
+float getBlend(vec3 pos, float curentStepSize);
 float distPointLine(vec3 a, vec3 d, vec3 point);
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir);
 vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize);
@@ -162,27 +163,32 @@ void main()
 		vec3 lineStart;
 		vec3 currentPos;
 		bool outOfFrustum;
+		bool searching;
 		bool done;
+		bool maskedOut;
 		int prevLineIn;
 		int threadsIn;
 		uint ballot;
+		RandState rng;
 		for(;;) {
 			// Find suitable position for thread to draw at by checking if the currentPos is in the frustum and sharing that information with all threads
 			outOfFrustum = true;
+			searching = true;
 			done = false;
+			maskedOut = false;
 			prevLineIn = 0;
 			threadsIn = 0;
 			// lineNumber = 0;
 			ballot = 0;
 
-			while(outOfFrustum) {
+			while(searching) {
 				// Intersect with frustum to find next line
 				vec3 sL = line + ftb;
 				sL = intersectFrustum(Ray(sL, -startLine), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
 				secondLine = floorGridPointByDir(sL, startLine, stepSize);
 
 				// Calculate step size
-				stepSize = getStepSize(sL);
+				stepSize = getStepSize(firstLine);
 				ftb = grassConsts.FtBDirection * stepSize;
 				startLine = startLineDir * stepSize;
 
@@ -199,27 +205,40 @@ void main()
 				// Check if position is in frustum and share with other threads
 				if(!any(isinf(lineStart))) {
 					// Find thread position
-					currentPos = lineStart + (gl_LocalInvocationID.x - prevLineIn) * startLine;
+					int localCompactId = 0;
+					if(gl_LocalInvocationID.x > 0) {
+						localCompactId = bitCount(ballotThreadNV(true) >> (32 - gl_LocalInvocationID.x));
+					}
+					currentPos = lineStart + (localCompactId + prevLineIn) * startLine;
+					ivec2 iPos = ivec2(round(currentPos.xz / stepSize));
+					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
 					// Check if in frustum
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
-					ballot = ballotThreadNV(outOfFrustum);
-				} else if(lineNumber > 2) {
+					rng = rand_init(seedPos.x, seedPos.y);
+					// maskedOut = rand_next(rng) < getBlend(currentPos, stepSize);
+					// maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
+				} else {
+					outOfFrustum = true;
+				}
+
+				if(prevLineIn == 0 && ballotThreadNV(outOfFrustum) == ballotThreadNV(true)) {
 					done = true;
 					break;
 				}
 
+				prevLineIn += bitCount(ballotThreadNV(true));
+				searching = maskedOut || outOfFrustum;
 			
 				// thread not in frustum, go to next line
-				if(outOfFrustum) {
-					// update thread count in frustum
-					int firstOut = findLSB(ballot);
-					prevLineIn = firstOut;
-
+				if(ballotThreadNV(outOfFrustum) != 0) {
 					// next line
+					prevLineIn = 0;
 					line += ftb;
 					firstLine = secondLine;
 					lineNumber++;
-				} else if (gl_LocalInvocationID.x == 31) {
+				} 
+				
+				if (gl_LocalInvocationID.x == findMSB(ballotThreadNV(true))) {
 					// last thread found position to draw at
 					lastPosition = currentPos + startLine;
 				}
@@ -250,14 +269,24 @@ void main()
 // Get step size for regular grid by position representing the line currently worked on
 float getStepSize(vec3 pos) {
 	float dist = length(pos - camera.CamPos); //distPointLine(pos, grassConsts.PerpFtBDir, camera.CamPos);
-	float factor = ((dist - grassConsts.StepDist) / 2); //grassConsts.StepDoubleDist;
+	float factor = dist / grassConsts.StepDist; //grassConsts.StepDoubleDist;
 	
-	if(factor < 1) {
+	if(factor <= 1) {
 		factor = 1;
 	} else {
-		factor = pow(2, log2(int(factor + 1)));
+		factor = pow(2, floor(log2(factor)));
 	}
 	return factor * grassConsts.Step;
+}
+
+float getBlend(vec3 pos, float currentStepSize) {
+	float blend;
+	float dist = length(pos - camera.CamPos);
+	float factor = dist / grassConsts.StepDist; 
+
+	blend = log2(factor / (currentStepSize / grassConsts.Step));
+
+	return blend;
 }
 
 float distPointLine(vec3 a, vec3 d, vec3 point) {
