@@ -168,7 +168,7 @@ void main() {
 		influencePoint = vInfluencePoint[0];
 
 		// LOD
-		float maxDist = 5;
+		float maxDist = 80;
 		float minLod = 2;
 		float maxLod = 10;
 		float lod = minLod + (1 - length(camera.CamPos - quadVertices[0][0])/maxDist) * (maxLod - minLod);
@@ -195,14 +195,16 @@ void main() {
 // Tessellation Evaluation Shader
 #ifdef IN_TES
 
-layout(triangles, equal_spacing, ccw) in;
+layout(quads, equal_spacing, ccw) in;
 patch in vec3 influencePoint;
 out vec3 normal;
 
 void main() {
 	// Curves for left and right edge of the blade (quadratic bezier)
-	vec3 r = pow(1 - gl_TessCoord.y, 2) * gl_in[3].gl_Position.xyz + 2 * (1 - gl_TessCoord.y) * gl_TessCoord.y * influencePoint + pow(gl_TessCoord.y, 2) * gl_in[2].gl_Position.xyz;
-	vec3 l = r + vec3(gl_in[0].gl_Position - gl_in[3].gl_Position);
+	vec3 topCenter = (gl_in[2].gl_Position.xyz + gl_in[1].gl_Position.xyz) / 2;
+	vec3 r = pow(1 - gl_TessCoord.y, 2) * gl_in[3].gl_Position.xyz + 2 * (1 - gl_TessCoord.y) * gl_TessCoord.y * influencePoint + pow(gl_TessCoord.y, 2) * topCenter;
+	vec3 l = pow(1 - gl_TessCoord.y, 2) * gl_in[0].gl_Position.xyz + 2 * (1 - gl_TessCoord.y) * gl_TessCoord.y * (influencePoint + vec3(gl_in[1].gl_Position - gl_in[2].gl_Position)) + pow(gl_TessCoord.y, 2) * topCenter;
+	// vec3 l = r + vec3(gl_in[0].gl_Position - gl_in[3].gl_Position);
 	vec3 pos = mix(l, r, gl_TessCoord.x);
 
 	gl_Position = camera.ViewProj * vec4(pos, 1.0);
