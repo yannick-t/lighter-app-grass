@@ -773,7 +773,7 @@ int run() {
 			glsl::CSGrassConstants csGrassConstants;
 
 			float step = 0.1;
-			int tileDivisor = 32;
+			int tileDivisor = 128;
 			csGrassConstants.FtBDirection = camera.regGridDirection;
 			if (camera.regGridDirDiagonal) {
 				csGrassConstants.FtBDirection /= 2;
@@ -782,7 +782,6 @@ int run() {
 			csGrassConstants.Step = step;
 			csGrassConstants.StepDist = stepNormalDist;
 			csGrassConstants.StepDoubleDist = stepDoubleDist;
-			// std::cout << stepDoubleDist << std::endl;
 			csGrassConstants.TileDivisor = tileDivisor;
 			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
 
