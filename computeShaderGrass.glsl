@@ -107,6 +107,14 @@ void main()
 
 	if(intersectionCount > 3 && gl_WorkGroupID.x == 2 && gl_WorkGroupID.y == 1) {
 
+		// debug
+		vec3 p = vec3(0);
+		for (int i = 0; i < 8; i++)
+		{
+			p += frustumPoints[i];
+		}
+		// debug
+
 		float stepSize = grassConsts.Step;
 
 		// Find start point for iteration (minimum by ftb)
@@ -149,7 +157,6 @@ void main()
 			drawWorldPos(intersections[i], vec4(0.0, 1.0, 1.0, 1.0)); // Draw intersection points
 		}
 
-
 		// Iterate through cells
 		int i = 0;
 		int maxIt = 100;
@@ -171,7 +178,7 @@ void main()
 		uint ballot;
 		RandState rng;
 
-		for(int k = 0; k < 1; k++) {
+		for(;;) {
 			// Find suitable position for thread to draw at by checking if the currentPos is in the frustum and sharing that information with all threads
 			outOfFrustum = true;
 			searching = true;
@@ -202,8 +209,7 @@ void main()
 					} else {
 						lineStart = floorGridPointByDir(lineTwoStart - ftbStep, horizontalStep, stepSize);
 					}
-
-
+					
 					drawWorldPos(lineStart, vec4(1.0, 1.0, 0.0, 1.0));
 
 					newLine = false;
@@ -215,21 +221,20 @@ void main()
 					// Find thread position
 					uint localCompactId = 0;
 					if(gl_LocalInvocationID.x > 0) {
-						// localCompactId = bitCount(ballotThreadNV(true) >> (32 - gl_LocalInvocationID.x));
-						localCompactId = gl_LocalInvocationID.x;
+						localCompactId = bitCount(ballotThreadNV(true) << (32 - gl_LocalInvocationID.x));
 					}
 
-					currentPos = lineStart + (localCompactId/* + prevThreadsInLine*/) * horizontalStep;
+					currentPos = lineStart + (localCompactId + prevThreadsInLine) * horizontalStep;
 
-					// ivec2 iPos = ivec2(round(currentPos.xz / stepSize));
-					// ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
+					ivec2 iPos = ivec2(round(currentPos.xz / stepSize));
+					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
 
 					// Check if in frustum
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
 
-					// rng = rand_init(seedPos.x, seedPos.y);
-					// maskedOut = rand_next(rng) < getBlend(currentPos, stepSize);
-					// maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
+					rng = rand_init(seedPos.x, seedPos.y);
+					maskedOut = rand_next(rng) < getBlend(currentPos, stepSize);
+					maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
 				} else {
 					outOfFrustum = true;
 				}
@@ -238,17 +243,15 @@ void main()
 				if(prevThreadsInLine == 0 && ballotThreadNV(outOfFrustum) == ballotThreadNV(true)) {
 					done = true;
 					break;
-				}
+				}*/
 
 				if(!outOfFrustum){
 					prevThreadsInLine += bitCount(ballotThreadNV(true));
-				}*/
+				}
 				searching = maskedOut || outOfFrustum;
 			
 				// thread not in frustum, go to next line
-				if(outOfFrustum /*ballotThreadNV(outOfFrustum) != 0*/) {
-					drawWorldPos(currentPos, vec4(0.0, 1.0, 0.0, 1.0));
-
+				if(ballotThreadNV(outOfFrustum) != 0) {
 					// next line
 					prevThreadsInLine = 0;
 					newLine = true;
@@ -256,13 +259,13 @@ void main()
 					lineNumber++;
 				}
 				
-				if (gl_LocalInvocationID.x == 31 /*findMSB(ballotThreadNV(true))*/) {
+				if (gl_LocalInvocationID.x == findMSB(ballotThreadNV(true))) {
 					// last thread found position to draw at
 					lastPosition = currentPos + horizontalStep;
 				}
 
 				i++;
-				if(i >= maxIt) {
+				if (i >= maxIt) {
 					done = true;
 					break;
 				}
@@ -293,7 +296,7 @@ float getStepSize(vec3 pos) {
 	} else {
 		factor = pow(2, floor(log2(factor)));
 	}
-	return 1 * grassConsts.Step;
+	return factor * grassConsts.Step;
 }
 
 float getBlend(vec3 pos, float currentStepSize) {
@@ -460,9 +463,9 @@ void drawNDC(vec3 ndc, vec4 colour) {
 
 		ivec2 imagePos = ivec2(texCoords * imageSize(result));
 		imageStore(result, imagePos, colour);
-		//imageStore(result, imagePos + ivec2(0, 1), colour);
-		//imageStore(result, imagePos + ivec2(1, 0), colour);
-		//imageStore(result, imagePos + ivec2(1, 1), colour);
+		imageStore(result, imagePos + ivec2(0, 1), colour);
+		imageStore(result, imagePos + ivec2(1, 0), colour);
+		imageStore(result, imagePos + ivec2(1, 1), colour);
 	}
 }
 
