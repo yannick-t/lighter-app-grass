@@ -95,12 +95,21 @@ struct Camera {
 		float angle = atan2(orientation[2].z, orientation[2].x);
 		int octant = static_cast<int>(roundf(8 * angle / (2 * M_PI) + 8)) % 8;
 
+		int perpOctant = (octant - 2) % 8;
+		if (perpOctant < 0) {
+			perpOctant += 8;
+		}
+
 		regGridDirection = regGridDirectionFromOctant(octant);
-		perpRegGridDirection = regGridDirectionFromOctant((octant - 2) % 8);
+		perpRegGridDirection = regGridDirectionFromOctant(perpOctant);
 		regGridDirDiagonal = octant % 2 == 1;
+
+		// std::cout << regGridDirection << std::endl;
+		// std::cout << (roundf(8 * angle / (2 * M_PI) + 8)) << std::endl;
 
 		recalcualteFrustum();
 	}
+
 
 	glm::vec3 regGridDirectionFromOctant(int octant) {
 		switch (octant) {
@@ -108,10 +117,10 @@ struct Camera {
 			case 1: return glm::vec3(-1, 0, -1);
 			case 2: return glm::vec3(0, 0, -1);
 			case 3: return glm::vec3(1, 0, -1);
-			case 4: return glm::vec3(1, 0, 0); 
+			case 4: return glm::vec3(1, 0, 0);
 			case 5: return glm::vec3(1, 0, 1);
-			case 6: return glm::vec3(0, 0, 1); 
-			case 7: return glm::vec3(-1, 0, 1); 
+			case 6: return glm::vec3(0, 0, 1);
+			case 7: return glm::vec3(-1, 0, 1);
 			default: return glm::vec3(-1, 0, 1);
 		}
 	}

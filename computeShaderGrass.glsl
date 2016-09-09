@@ -105,7 +105,7 @@ void main()
 		}
 	}
 
-	if(intersectionCount > 3 && gl_WorkGroupID.x == 2 && gl_WorkGroupID.y == 1) {
+	if(intersectionCount > 3/* && gl_WorkGroupID.x == 2 && gl_WorkGroupID.y == 1*/) {
 
 		// debug
 		vec3 p = vec3(0);
@@ -127,10 +127,6 @@ void main()
 		}
 		vec3 start = intersections[index];
 
-		stepSize = getStepSize(start);
-		// Round to next cell position 
-		start = floorGridPointByDir(start, grassConsts.FtBDirection, stepSize);
-
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing to other intersection points
 		vec3 lineDirection = grassConsts.PerpFtBDir;
 		float dotSum = 0;													// If necessary mirror vector so it points roughly the right direction
@@ -143,11 +139,21 @@ void main()
 			lineDirection = -lineDirection;
 		}
 
+		stepSize = getStepSize(start);
+		// Round to next cell position 
+		start = floorGridPointByDir(start, grassConsts.FtBDirection + lineDirection, stepSize);
+
 		// Find planes of the frustum that are on in the general direction of the lineDirection vector
 		// Check these during iteration to find out if we're outside of the frustum
 		bool frustumPlanesToCheck[6];
+		bool frustumPlanesToCheckLine[6];
+		bool frustumPlanesToCheckLineNegated[6];
+		bool frustumPlanesToCheckFtB[6];
 		for(int i = 0; i < 6; i++) {
-			frustumPlanesToCheck[i] = dot(lineDirection, frustumPlaneNormals[i]) >= 0;
+			frustumPlanesToCheckLine[i] = dot(lineDirection, frustumPlaneNormals[i]) >= 0;
+			frustumPlanesToCheckLineNegated[i] = !frustumPlanesToCheckLine[i];
+			frustumPlanesToCheckFtB[i] = dot(grassConsts.PerpFtBDir, frustumPlaneNormals[i]) >= 0;
+			frustumPlanesToCheck[i] = frustumPlanesToCheckLine[i] || frustumPlanesToCheckFtB[i];
 			// drawNDC(vec3(0.5 + float(i) / 24, 0.5, 0.5), vec4(frustumPlanesToCheck[i] ? 0.0 : 1.0, frustumPlanesToCheck[i] ? 1.0 : 0.0, 0.0, 1.0));
 		}
 
@@ -199,7 +205,7 @@ void main()
 
 					// Intersect with frustum to find next line
 					vec3 lT = lineOneStart + ftbStep;
-					lT = intersectFrustum(Ray(lT, -horizontalStep), negate(frustumPlanesToCheck), frustumPlaneNormals, frustumPoints);
+					lT = intersectFrustum(Ray(lT, -horizontalStep), frustumPlanesToCheckLineNegated, frustumPlaneNormals, frustumPoints);
 					lineTwoStart = floorGridPointByDir(lT, horizontalStep, stepSize);
 
 					
@@ -239,11 +245,11 @@ void main()
 					outOfFrustum = true;
 				}
 
-				/*
+				
 				if(prevThreadsInLine == 0 && ballotThreadNV(outOfFrustum) == ballotThreadNV(true)) {
 					done = true;
 					break;
-				}*/
+				}
 
 				if(!outOfFrustum){
 					prevThreadsInLine += bitCount(ballotThreadNV(true));
@@ -266,6 +272,8 @@ void main()
 
 				i++;
 				if (i >= maxIt) {
+					drawWorldPos(p / 8, vec4(1.0, 0.0, 0.0, 1.0));
+
 					done = true;
 					break;
 				}
@@ -276,7 +284,8 @@ void main()
 			}
 
 			// found position -> draw
-			drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
+			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
+			drawWorldPos(currentPos, vec4(1.0, 1.0, 1.0, 1.0));
 
 
 			// get position of last thread to find the next cells to draw at
