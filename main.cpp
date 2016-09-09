@@ -107,7 +107,7 @@ struct Camera {
 		// std::cout << regGridDirection << std::endl;
 		// std::cout << (roundf(8 * angle / (2 * M_PI) + 8)) << std::endl;
 
-		recalcualteFrustum();
+		calcViewProj();
 	}
 
 
@@ -127,125 +127,7 @@ struct Camera {
 
 	void rePosition(glm::vec3 pos) {
 		this->pos = pos;
-		recalcualteFrustum();
-	}
-
-	void recalcualteFrustum() {
-		frustumChanged = true;
 		calcViewProj();
-
-		glm::vec4 ntl = (viewProjectionInverse * glm::vec4(-1.0, 1.0, -1.0, 1.0)); // top left
-		nearPoints[0] = ntl.xyz / ntl.w;
-		glm::vec4 ntr = (viewProjectionInverse * glm::vec4(1.0, 1.0, -1.0, 1.0)); // top right
-		nearPoints[1] = ntr.xyz / ntr.w;
-		glm::vec4 nbl = (viewProjectionInverse * glm::vec4(-1.0, -1.0, -1.0, 1.0)); // bottom left
-		nearPoints[2] = nbl.xyz / nbl.w;
-		glm::vec4 nbr = (viewProjectionInverse * glm::vec4(1.0, -1.0, -1.0, 1.0)); // bottom right
-		nearPoints[3] = nbr.xyz / nbr.w;
-
-
-		glm::vec4 ftl = (viewProjectionInverse * glm::vec4(-1.0, 1.0, 1.0, 1.0)); // top left
-		farPoints[0] = ftl.xyz / ftl.w;
-		glm::vec4 ftr = (viewProjectionInverse * glm::vec4(1.0, 1.0, 1.0, 1.0)); // top right
-		farPoints[1] = ftr.xyz / ftr.w;
-		glm::vec4 fbl = (viewProjectionInverse * glm::vec4(-1.0, -1.0, 1.0, 1.0)); // bottom left
-		farPoints[2] = fbl.xyz / fbl.w;
-		glm::vec4 fbr = (viewProjectionInverse * glm::vec4(1.0, -1.0, 1.0, 1.0)); // bottom right
-		farPoints[3] = fbr.xyz / fbr.w;
-
-		// Todo: optimize
-		rightNormal = glm::normalize(cross(nearPoints[1] - farPoints[1], farPoints[3] - farPoints[1]));
-		leftNormal = glm::normalize(cross(farPoints[0] - nearPoints[0], nearPoints[2] - nearPoints[0]));
-		topNormal = glm::normalize(cross(farPoints[1] - nearPoints[1], nearPoints[0] - nearPoints[1]));
-		bottomNormal = glm::normalize(cross(farPoints[2] - nearPoints[2], nearPoints[3] - nearPoints[2]));
-		nearNormal = glm::normalize(cross(nearPoints[0] - nearPoints[1], nearPoints[3] - nearPoints[1]));
-		farNormal = glm::normalize(cross(farPoints[1] - farPoints[0], farPoints[2] - farPoints[0]));
-
-		min = glm::vec3(std::numeric_limits<float>::max());
-		max = glm::vec3(-std::numeric_limits<float>::max());
-
-		for (int i = 0; i < 4; i++) {
-			// printf("i: %d - x: %f, y: %f, z: %f \n", i, nearPoints[i].x, nearPoints[i].y, nearPoints[i].z);
-			for (int j = 0; j < 3; j++) {
-
-				if (nearPoints[i][j] < min[j]) {
-					min[j] = nearPoints[i][j];
-				}
-				if (nearPoints[i][j] > max[j]) {
-					max[j] = nearPoints[i][j];
-				}
-			}
-		}
-		for (int i = 0; i < 4; i++) {
-			// printf("i: %d - x: %f, y: %f, z: %f \n", i, farPoints[i].x, farPoints[i].y, farPoints[i].z);
-			for (int j = 0; j < 3; j++) {
-				if (farPoints[i][j] < min[j]) {
-					min[j] = farPoints[i][j];
-				}
-				if (farPoints[i][j] > max[j]) {
-					max[j] = farPoints[i][j];
-				}
-			}
-		}
-	}
-
-	float computeFootprintNDCQuad(std::vector<glm::vec3>& points) {
-		float f = 0;
-		int j = points.size() - 1;
-
-		for (int i = 0; i < points.size(); i++) {
-			f = f + (points[j].x + points[i].x) * (points[j].y - points[i].y);
-			j = i;
-		}
-		f = f / 2;
-		for (int i = 0; i < 4; i++) {
-			printf("i: %d - x: %f, y: %f, z: %f \n", i, points[i].x, points[i].y, points[i].z);
-		}
-
-		printf("footprint: %f \n", abs(f));
-		return abs(f);
-	}
-
-	bool quadInFrustum(std::vector<glm::vec3> points) {
-		// Find out if points of the quad are all outside of one of the frustums planes
-
-		if (pointsOutsideOfPlane(pos, rightNormal, points) || pointsOutsideOfPlane(pos, leftNormal, points) || pointsOutsideOfPlane(pos, topNormal, points) ||
-			pointsOutsideOfPlane(pos, bottomNormal, points) || pointsOutsideOfPlane(nearPoints[0], nearNormal, points) || pointsOutsideOfPlane(farPoints[0], farNormal, points)) {
-
-			return false;
-		}
-		return true;
-	}
-
-	bool pointsOutsideOfPlane(glm::vec3 planePoint, glm::vec3 planeNormal, std::vector<glm::vec3> points) {
-		// outside == on the side of the normal
-		for (int i = 0; i < 4; i++) {
-			if (dot(planeNormal, points[i] - planePoint) < 0) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	void pointsToNDC(std::vector<glm::vec3>& p, std::vector<glm::vec3>& result) {
-		for (int i = 0; i < p.size(); i++) {
-			glm::vec4 pc1 = viewProjection * glm::vec4(p[i], 1.0);
-			result[i] = (i , pc1.xyz * 1 / pc1.w);
-		}
-	}
-
-	bool normalizedPointInFrustum(glm::vec3 pointN) {
-		return (pointN.x >= -1 && pointN.x <= 1) &&
-			(pointN.y >= -1 && pointN.y <= 1) &&
-			(pointN.z >= -1 && pointN.z <= 1);
-	}
-
-	float distanceRectToCamera(glm::vec3 min, glm::vec3 max) {
-		// Rectangle needs to be axis aligned
-		float dx = std::max(std::max(min.x - pos.x, 0.0f), pos.x - max.x);
-		float dy = std::max(std::max(min.y - pos.y, 0.0f), pos.y - max.y);
-		float dz = std::max(std::max(min.z - pos.z, 0.0f), pos.z - max.z);
-		return std::sqrtf(dx * dx + dy * dy + dz * dz);
 	}
 
 	glm::mat4 view() const {
@@ -260,12 +142,6 @@ struct Camera {
 		viewProjection = proj() * view();
 		viewProjectionInverse = glm::inverse(viewProjection);
 	}
-};
-
-struct GrassPatch {
-	glm::vec3 pos;
-	float size;
-	float density;
 };
 
 struct RenderableMesh {
@@ -314,64 +190,8 @@ struct RenderableMesh {
 namespace main_ex {
 }
 
-float baseGrassPatchSize = 200;
-float grassPatchMaxHeight = 1.5;
-float baseGrassDensity = 0.1; // number of grass blades per unit for largest grass patches
-float maxPatchDistanceToSubdivide = 10;
-float maxPatchSubdivRecursion = 3;
-float subdivDensityFactor = 2;
-float maxGrassBladeWidthFactor = 10;
-
-void addAndSubdivide(float x, float z, float size, float density, Camera camera, std::vector<GrassPatch>& patches, int recursion = 0);
-void calcPatches(Camera camera, std::vector<GrassPatch>& patches);
-
-void calcPatches(Camera camera, std::vector<GrassPatch>& patches) {
-	patches.clear();
-
-	if (camera.min.y < grassPatchMaxHeight && camera.max.y > grassPatchMaxHeight) {
-		// Test for patches that are possibly in the frustum if they are
-		// Round down to next patch position
-		glm::vec2 start = glm::vec2((floorf(camera.min.x / baseGrassPatchSize)) * baseGrassPatchSize,
-		                            (floorf(camera.min.z / baseGrassPatchSize)) * baseGrassPatchSize);
-		// Round up to next patch position
-		glm::vec2 end = glm::vec2((ceilf(camera.max.x / baseGrassPatchSize)) * baseGrassPatchSize,
-		                          (ceilf(camera.max.z / baseGrassPatchSize)) * baseGrassPatchSize);
-
-		float x = 0;
-		float z = 0;
-		for (float x = start.x; x <= end.x; x += baseGrassPatchSize) {
-			for (float z = start.y; z <= end.y; z += baseGrassPatchSize) {
-				addAndSubdivide(x, z, baseGrassPatchSize, baseGrassDensity, camera, patches);
-			}
-		}
-	}
-}
-
-void addAndSubdivide(float x, float z, float size, float density, Camera camera, std::vector<GrassPatch>& patches, int recursion) {
-	// Check if patch is in view frustum
-	std::vector<glm::vec3> points{glm::vec3(x, grassPatchMaxHeight, z), glm::vec3(x + size, grassPatchMaxHeight, z),
-		glm::vec3(x + size, grassPatchMaxHeight, z + size), glm::vec3(x, grassPatchMaxHeight, z + size)};
-
-
-	if (camera.quadInFrustum(points)) {
-		// patch + subpatches
-
-		GrassPatch patch;
-		patch.pos = glm::vec3(x, 0.0, z);
-		patch.size = size;
-		patch.density = density;
-		patches.push_back(patch);
-
-
-		// Subpatches
-		if ((camera.distanceRectToCamera(points[0], points[2]) + (((float)recursion / (float)maxPatchSubdivRecursion) * maxPatchDistanceToSubdivide)) < maxPatchDistanceToSubdivide) { // make sure it doesn't subdivide infinitely
-			float subdivSize = size / 2;
-			for (int i = 0; i < 4; i++) {
-				addAndSubdivide((x + (i % 2) * subdivSize), (z + ((int)(i / 2)) * subdivSize), subdivSize, density * subdivDensityFactor, camera, patches, recursion + 1);
-			}
-		}
-	}
-}
+float csGrassStepSize = 0.06;
+float stepDist = 2;
 
 int run() {
 	ogl::Platform platform(3, 3);
@@ -400,17 +220,6 @@ int run() {
 		mouse.setMouseCapture(wnd, pressed);
 	};
 
-	// Debug options
-	// button to stop recalculating the patches
-	bool reCalcPatches = true;
-	keyboard.keyEvent[GLFW_KEY_C].pressOnce = [&]() {
-		reCalcPatches = !reCalcPatches;
-	};
-	// button to draw the boarders of the patches
-	bool drawPatchBorders = false;
-	keyboard.keyEvent[GLFW_KEY_B].pressOnce = [&]() {
-		drawPatchBorders = !drawPatchBorders;
-	};
 
 
 	// load shaders
@@ -420,8 +229,6 @@ int run() {
 	shaders.push_back(&backgroundShader);
 	ogl::ProgramWithTime tonemapShader("data/tonemap.glsl");
 	shaders.push_back(&tonemapShader);
-	ogl::ProgramWithTime geometryGrassShader("data/referenceGeometryGrass.glsl", "", ogl::ProgramWithTime::HasHS | ogl::ProgramWithTime::HasDS);
-	shaders.push_back(&geometryGrassShader);
 	ogl::ProgramWithTime computeShaderGrass("data/computeShaderGrass.glsl", "", ogl::ProgramWithTime::HasCS);
 	shaders.push_back(&computeShaderGrass);
 	ogl::ProgramWithTime csResultShader("data/csResultShader.glsl");
@@ -460,10 +267,6 @@ int run() {
 
 
 	// Grass Patch
-	// Todo: more sliders
-	auto grassPatchConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::GrassPatchConstants));
-	std::vector<GrassPatch> patches;
-
 	auto csGrassConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CSGrassConstants));
 
 	// Compute Shader Grass
@@ -477,10 +280,11 @@ int run() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
+	/*s
 	float stepDistFactor = (glm::length(camera.nearPoints[0] - camera.nearPoints[1]) / glm::length(camera.farPoints[0] - camera.farPoints[1]) - 1) / (camera.farPlane - camera.nearPlane);
 	// calc dist for horizontal length at normal dist to need to double to be the same length on the screen
 	float stepNormalDist = 2;
-	float stepDoubleDist = abs((2 * stepNormalDist + 1 / stepDistFactor) - stepNormalDist);
+	float stepDoubleDist = abs((2 * stepNormalDist + 1 / stepDistFactor) - stepNormalDist);*/
 	
 
 	// load environment map
@@ -545,11 +349,8 @@ int run() {
 		if (auto uiGroup = ui::Group(ui, nullptr)) {
 			ui.addText(nullptr, "Tweak", "", nullptr);
 			ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
-			ui.addSlider(&baseGrassDensity, "base grass density for patches", baseGrassDensity, 100, baseGrassDensity, 1);
-			ui.addSlider(&maxPatchDistanceToSubdivide, "the maximum distance of a patch to subdivide it", maxPatchDistanceToSubdivide, 100, maxPatchDistanceToSubdivide, 0.5f);
-			ui.addSlider(&maxPatchSubdivRecursion, "maximum recursion depth for the subdivision", maxPatchSubdivRecursion, 10, maxPatchSubdivRecursion, 1.0f);
-			ui.addSlider(&subdivDensityFactor, "factor applied to the density for subdivided patches", subdivDensityFactor, 20, subdivDensityFactor, 1.0f);
-			ui.addSlider(&maxGrassBladeWidthFactor, "maximum scaling factor applied t the grass blade width with distance", maxGrassBladeWidthFactor, 1000, maxGrassBladeWidthFactor);
+			ui.addSlider(&csGrassStepSize, "initial grid size", csGrassStepSize, 10.0f, csGrassStepSize, 0.1f);
+			ui.addSlider(&stepDist, "distance for teh step size to double", stepDist, 10.0f, stepDist, 0.1f);
 			//			if (auto uiUnion = ui::Union(ui)) 
 			{
 				// ui.addButton(3, "test button", nullptr);
@@ -591,7 +392,6 @@ int run() {
 	float fps = 0;
 
 	int bladeCount = 0;
-	int patchCount = 0;
 
 	while (!wnd.shouldClose()) {
 		glfwPollEvents();
@@ -697,79 +497,6 @@ int run() {
 			glDrawArrays(GL_TRIANGLES, 0, 3);
 		}
 
-		// Reference Geometry Grass
-		{
-
-			if (false) {
-				bladeCount = 0;
-
-				// Calculate patches if view frustum has changed or O is pressed
-				if (camera.frustumChanged && reCalcPatches || keyboard.keyState[GLFW_KEY_O]) {
-					calcPatches(camera, patches);
-					camera.frustumChanged = false;
-				}
-
-				// Draw patches
-				for (int i = 0; i < patches.size(); i++) {
-
-					int blades = patches[i].size * patches[i].size * patches[i].density;
-
-					glsl::GrassPatchConstants grassPatchConst; {
-						grassPatchConst.Position = patches[i].pos;
-						grassPatchConst.Size = patches[i].size;
-						grassPatchConst.MaxHeight = grassPatchMaxHeight;
-						grassPatchConst.MaxWidthFactor = maxGrassBladeWidthFactor;
-						grassPatchConst.PatchId = i;
-						grassPatchConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&grassPatchConst, 1));
-					}
-
-					hdrBuffer.bind(GL_FRAMEBUFFER);
-
-					glEnable(GL_DEPTH_TEST);
-					camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
-					lightConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
-					grassPatchConstBuffer.bind(GL_UNIFORM_BUFFER, 2);
-					nullVertexArrays.bind();
-					geometryGrassShader.bind();
-					glPatchParameteri(GL_PATCH_VERTICES, 1); // 1 Vertex per (Tessellation) Patch 
-					glDrawArrays(GL_PATCHES, 0, blades); // Draw vertices, shader will create grass blades for each one with random positions
-
-					bladeCount += blades;
-
-					// Draw boarders of the patches
-					if (drawPatchBorders) {
-						float points[] = {
-							patches[i].pos.x, grassPatchMaxHeight, patches[i].pos.z,
-							patches[i].pos.x, grassPatchMaxHeight, patches[i].pos.z + patches[i].size,
-							patches[i].pos.x, grassPatchMaxHeight, patches[i].pos.z + patches[i].size,
-							patches[i].pos.x + patches[i].size, grassPatchMaxHeight, patches[i].pos.z + patches[i].size,
-							patches[i].pos.x + patches[i].size, grassPatchMaxHeight, patches[i].pos.z + patches[i].size,
-							patches[i].pos.x + patches[i].size, grassPatchMaxHeight, patches[i].pos.z,
-							patches[i].pos.x + patches[i].size, grassPatchMaxHeight, patches[i].pos.z,
-							patches[i].pos.x, grassPatchMaxHeight, patches[i].pos.z
-						};
-
-						GLuint vbo = 0;
-						glGenBuffers(1, &vbo);
-						glBindBuffer(GL_ARRAY_BUFFER, vbo);
-						glBufferData(GL_ARRAY_BUFFER, 24 * sizeof(float), points, GL_STATIC_DRAW);
-
-						GLuint vao = 0;
-						glGenVertexArrays(1, &vao);
-						glBindVertexArray(vao);
-						glEnableVertexAttribArray(0);
-						glBindBuffer(GL_ARRAY_BUFFER, vbo);
-						glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-
-						debugShader.bind();
-						glDrawArrays(GL_LINES, 0, 8);
-					}
-				}
-
-				patchCount = patches.size();
-			}
-		}
-
 
 		// Compute Shader Grass
 		// auto csResult = renderTargetPool.acquire(ogl::TextureDesc::make2D(GL_TEXTURE_2D, GL_RGBA32F, screenDim.x, screenDim.y));
@@ -777,21 +504,19 @@ int run() {
 		glBindTexture(GL_TEXTURE_2D, csResult);
 		GLuint clearColor = 0;
 		glClearTexImage(csResult, 0, GL_RGB, GL_FLOAT, &clearColor);
-		glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); 
+		glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 		{
 			glsl::CSGrassConstants csGrassConstants;
 
 
-			float step = 0.1;
 			int tileDivisor = 128;
 			csGrassConstants.FtBDirection = camera.regGridDirection;
 			if (camera.regGridDirDiagonal) {
 				csGrassConstants.FtBDirection /= 2;
 			}
 			csGrassConstants.PerpFtBDir = camera.perpRegGridDirection;
-			csGrassConstants.Step = step;
-			csGrassConstants.StepDist = stepNormalDist;
-			csGrassConstants.StepDoubleDist = stepDoubleDist;
+			csGrassConstants.Step = csGrassStepSize;
+			csGrassConstants.StepDist = stepDist;
 			csGrassConstants.TileDivisor = tileDivisor;
 			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
 
@@ -814,6 +539,7 @@ int run() {
 			csResultShader.bind();
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		}
+		
 
 		// Blit / tonemap
 		{
@@ -881,10 +607,6 @@ int run() {
 				char bladeCountString[30];
 				_snprintf(bladeCountString, 30, "%d grass blades", bladeCount);
 				ui.addText(nullptr, bladeCountString, "", nullptr);
-
-				char patchCountString[20];
-				_snprintf(patchCountString, 20, "%d patches", patchCount);
-				ui.addText(nullptr, patchCountString, "", nullptr);
 
 				tweakUi(ui);
 				// ui::preset_user_interface(ui, tweakUi, defaultIniFile);

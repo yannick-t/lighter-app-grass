@@ -216,7 +216,7 @@ void main()
 						lineStart = floorGridPointByDir(lineTwoStart - ftbStep, horizontalStep, stepSize);
 					}
 					
-					drawWorldPos(lineStart, vec4(1.0, 1.0, 0.0, 1.0));
+					// drawWorldPos(lineStart, vec4(1.0, 1.0, 0.0, 1.0));
 
 					newLine = false;
 				}
@@ -272,7 +272,7 @@ void main()
 
 				i++;
 				if (i >= maxIt) {
-					drawWorldPos(p / 8, vec4(1.0, 0.0, 0.0, 1.0));
+					// drawWorldPos(p / 8, vec4(1.0, 0.0, 0.0, 1.0));
 
 					done = true;
 					break;
@@ -284,8 +284,8 @@ void main()
 			}
 
 			// found position -> draw
-			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
-			drawWorldPos(currentPos, vec4(1.0, 1.0, 1.0, 1.0));
+			drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
+			// drawWorldPos(currentPos, vec4(1.0, 1.0, 1.0, 1.0));
 
 
 			// get position of last thread to find the next cells to draw at
@@ -293,6 +293,10 @@ void main()
 			lineOneStart = lastPosition;
 		}
 	}
+	/*
+	for(int m = 0; m < 5; m++) {
+		drawWorldPos(vec3(0) + m * grassConsts.FtBDirection, vec4(0.0, 1.0, 0.0, 1.0));
+	}*/
 }
 
 // Get step size for regular grid by position representing the line currently worked on
@@ -472,9 +476,9 @@ void drawNDC(vec3 ndc, vec4 colour) {
 
 		ivec2 imagePos = ivec2(texCoords * imageSize(result));
 		imageStore(result, imagePos, colour);
-		imageStore(result, imagePos + ivec2(0, 1), colour);
-		imageStore(result, imagePos + ivec2(1, 0), colour);
-		imageStore(result, imagePos + ivec2(1, 1), colour);
+		// imageStore(result, imagePos + ivec2(0, 1), colour);
+		// imageStore(result, imagePos + ivec2(1, 0), colour);
+		// imageStore(result, imagePos + ivec2(1, 1), colour);
 	}
 }
 

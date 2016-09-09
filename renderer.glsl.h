@@ -31,14 +31,6 @@ struct LightConstants
 	vec4 Color;
 };
 
-struct GrassPatchConstants
-{
-	vec3 Position;
-	float Size;
-	float MaxHeight;
-	float MaxWidthFactor;
-	int PatchId;
-};
 
 struct CSGrassConstants 
 {
