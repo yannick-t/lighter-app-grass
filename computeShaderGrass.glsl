@@ -105,7 +105,7 @@ void main()
 		}
 	}
 
-	if(intersectionCount > 3/* && gl_WorkGroupID.x == 2 && gl_WorkGroupID.y == 1*/) {
+	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 2*/) {
 
 		// debug
 		vec3 p = vec3(0);
@@ -125,17 +125,26 @@ void main()
 				index = i;
 			}
 		}
-		vec3 start = intersections[index];
-
-		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing to other intersection points
-		vec3 lineDirection = grassConsts.PerpFtBDir;
-		float dotSum = 0;													// If necessary mirror vector so it points roughly the right direction
+		// Calculate second smallest minumum by ftb
+		int indexS = 0;
+		if(index == 0) {
+			indexS = 1;
+		}
 		for(int i = 0; i < intersectionCount; i++) {
-			if(i != index) {
-				dotSum += dot(lineDirection, intersections[i] - intersections[index]);
+			if(i == index || i == indexS) {
+				continue;
+			}
+			if(lessThanByDir(intersections[i], intersections[indexS], grassConsts.FtBDirection)) {
+				indexS = i;
 			}
 		}
-		if(dotSum < 0.0) {		
+
+		vec3 start = intersections[index];
+
+		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing to second nearest intersection point
+		vec3 lineDirection = grassConsts.PerpFtBDir;
+		// If necessary mirror vector so it points roughly the right direction
+		if(dot(lineDirection, intersections[indexS] - intersections[index]) < 0.0) {
 			lineDirection = -lineDirection;
 		}
 
@@ -160,12 +169,18 @@ void main()
 
 		// debug
 		for(int i = 0; i < intersectionCount; i++) {
-			drawWorldPos(intersections[i], vec4(0.0, 1.0, 1.0, 1.0)); // Draw intersection points
+			if(i == indexS) {
+				drawWorldPos(intersections[i], vec4(1.0, 1.0, 1.0, 1.0));
+			} else {
+				drawWorldPos(intersections[i], vec4(0.0, 1.0, 1.0, 1.0)); // Draw intersection points
+			}
 		}
 
 		// Iterate through cells
 		int i = 0;
-		int maxIt = 100;
+		int maxIt = 1000;
+		int invalidIntersectionSteps = 0;
+		int maxInvalidIntersectionSteps = 1;
 
 		vec3 ftbStep = grassConsts.FtBDirection * stepSize;
 		vec3 horizontalStep;
@@ -198,25 +213,34 @@ void main()
 
 			while(searching) {
 				if(newLine) {
-					// Calculate step size
-					stepSize = getStepSize(lineOneStart);
-					ftbStep = grassConsts.FtBDirection * stepSize;
-					horizontalStep = lineDirection * stepSize;
+					vec3 lT;
+					do {
+						invalidIntersectionSteps++;
 
-					// Intersect with frustum to find next line
-					vec3 lT = lineOneStart + ftbStep;
-					lT = intersectFrustum(Ray(lT, -horizontalStep), frustumPlanesToCheckLineNegated, frustumPlaneNormals, frustumPoints);
+						// Calculate step size
+						stepSize = getStepSize(lineOneStart);
+						ftbStep = grassConsts.FtBDirection * stepSize;
+						horizontalStep = lineDirection * stepSize;
+
+						// Intersect with frustum to find next line
+						lT = lineOneStart + invalidIntersectionSteps * ftbStep;
+						lT = intersectFrustum(Ray(lT, -horizontalStep), frustumPlanesToCheckLineNegated, frustumPlaneNormals, frustumPoints);
+						
+						if(invalidIntersectionSteps > maxInvalidIntersectionSteps) {
+							break;
+						}
+					} while(any(isinf(lT))); // search for a valid intersection
 					lineTwoStart = floorGridPointByDir(lT, horizontalStep, stepSize);
-
 					
 					// Check if the intersection of the next line indicates that there are more cells of the line in the frustum
 					if(lessThanByDir(lineOneStart, lineTwoStart, horizontalStep)) { // Todo: check if necessary (more than one cell difference (diagonal?))
 						lineStart = lineOneStart;
 					} else {
-						lineStart = floorGridPointByDir(lineTwoStart - ftbStep, horizontalStep, stepSize);
+						lineStart = floorGridPointByDir(lineTwoStart - invalidIntersectionSteps * ftbStep, horizontalStep, stepSize);
 					}
 					
 					// drawWorldPos(lineStart, vec4(1.0, 1.0, 0.0, 1.0));
+					// drawWorldPos(lT, vec4(1.0, 1.0, 0.0, 1.0));
 
 					newLine = false;
 				}
@@ -231,12 +255,15 @@ void main()
 					}
 
 					currentPos = lineStart + (localCompactId + prevThreadsInLine) * horizontalStep;
+					
 
 					ivec2 iPos = ivec2(round(currentPos.xz / stepSize));
 					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
 
 					// Check if in frustum
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
+
+					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0,0.0,1.0));
 
 					rng = rand_init(seedPos.x, seedPos.y);
 					maskedOut = rand_next(rng) < getBlend(currentPos, stepSize);
@@ -246,7 +273,7 @@ void main()
 				}
 
 				
-				if(prevThreadsInLine == 0 && ballotThreadNV(outOfFrustum) == ballotThreadNV(true)) {
+				if(prevThreadsInLine == 0 && ballotThreadNV(outOfFrustum) == ballotThreadNV(true) && lineNumber > 0) {
 					done = true;
 					break;
 				}
@@ -259,6 +286,7 @@ void main()
 				// thread not in frustum, go to next line
 				if(ballotThreadNV(outOfFrustum) != 0) {
 					// next line
+					invalidIntersectionSteps = 0;
 					prevThreadsInLine = 0;
 					newLine = true;
 					lineOneStart = lineTwoStart;
@@ -272,7 +300,7 @@ void main()
 
 				i++;
 				if (i >= maxIt) {
-					// drawWorldPos(p / 8, vec4(1.0, 0.0, 0.0, 1.0));
+					drawWorldPos(p / 8, vec4(1.0, 1.0, 0.0, 1.0));
 
 					done = true;
 					break;
@@ -292,11 +320,8 @@ void main()
 			memoryBarrierShared();
 			lineOneStart = lastPosition;
 		}
+		drawWorldPos(start, vec4(1.0,1.0,1.0,1.0));
 	}
-	/*
-	for(int m = 0; m < 5; m++) {
-		drawWorldPos(vec3(0) + m * grassConsts.FtBDirection, vec4(0.0, 1.0, 0.0, 1.0));
-	}*/
 }
 
 // Get step size for regular grid by position representing the line currently worked on
@@ -347,11 +372,15 @@ vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize) {
 		// floors point to grid point in the opposite direction of dir 
 		if(dir.x > 0) {
 			result.x = floor(point.x / stepSize) * stepSize;
+		} else if (dir.x == 0) {
+			result.x = round(point.x / stepSize) * stepSize;
 		} else {
 			result.x = ceil(point.x / stepSize) * stepSize;
 		}
 		if(dir.z > 0) {
 			result.z = floor(point.z / stepSize) * stepSize;
+		} else if(dir.z == 0) {
+			result.z = round(point.z / stepSize) * stepSize;
 		} else {
 			result.z = ceil(point.z / stepSize) * stepSize;
 		}

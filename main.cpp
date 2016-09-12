@@ -349,8 +349,8 @@ int run() {
 		if (auto uiGroup = ui::Group(ui, nullptr)) {
 			ui.addText(nullptr, "Tweak", "", nullptr);
 			ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
-			ui.addSlider(&csGrassStepSize, "initial grid size", csGrassStepSize, 10.0f, csGrassStepSize, 0.1f);
-			ui.addSlider(&stepDist, "distance for teh step size to double", stepDist, 10.0f, stepDist, 0.1f);
+			ui.addSlider(&csGrassStepSize, "initial grid size", csGrassStepSize, 1.0f, csGrassStepSize, 0.1f);
+			ui.addSlider(&stepDist, "distance for the step size to double", stepDist, 10.0f, stepDist, 0.1f);
 			//			if (auto uiUnion = ui::Union(ui)) 
 			{
 				// ui.addButton(3, "test button", nullptr);
