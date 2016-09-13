@@ -105,7 +105,7 @@ void main()
 		}
 	}
 
-	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 2*/) {
+	if(intersectionCount > 3/* && gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 2*/) {
 
 		// debug
 		vec3 p = vec3(0);
@@ -180,7 +180,7 @@ void main()
 		int i = 0;
 		int maxIt = 1000;
 		int invalidIntersectionSteps = 0;
-		int maxInvalidIntersectionSteps = 1;
+		int maxInvalidIntersectionSteps = 2;
 
 		vec3 ftbStep = grassConsts.FtBDirection * stepSize;
 		vec3 horizontalStep;
@@ -191,29 +191,25 @@ void main()
 		vec3 currentPos;
 		bool outOfFrustum;
 		bool searching;
-		bool newLine;
-		bool done;
+		bool newLine = true;
+		bool done = false;
 		bool maskedOut;
 		int prevThreadsInLine;
 		int threadsIn;
 		uint ballot;
 		RandState rng;
 
-		for(;;) {
+		for(int ba = 0;;ba++) {
 			// Find suitable position for thread to draw at by checking if the currentPos is in the frustum and sharing that information with all threads
 			outOfFrustum = true;
 			searching = true;
-			newLine = true;
-			done = false;
 			maskedOut = false;
 			prevThreadsInLine = 0;
-			threadsIn = 0;
-			// lineNumber = 0;
-			ballot = 0;
+			lineNumber = 0;
 
 			while(searching) {
 				if(newLine) {
-					vec3 lT;
+					vec3 lT = lineOneStart;
 					do {
 						invalidIntersectionSteps++;
 
@@ -232,26 +228,22 @@ void main()
 					} while(any(isinf(lT))); // search for a valid intersection
 					lineTwoStart = floorGridPointByDir(lT, horizontalStep, stepSize);
 					
-					// Check if the intersection of the next line indicates that there are more cells of the line in the frustum
-					if(lessThanByDir(lineOneStart, lineTwoStart, horizontalStep)) { // Todo: check if necessary (more than one cell difference (diagonal?))
-						lineStart = lineOneStart;
-					} else {
-						lineStart = floorGridPointByDir(lineTwoStart - invalidIntersectionSteps * ftbStep, horizontalStep, stepSize);
-					}
+					lineStart = lineOneStart;
 					
-					// drawWorldPos(lineStart, vec4(1.0, 1.0, 0.0, 1.0));
-					// drawWorldPos(lT, vec4(1.0, 1.0, 0.0, 1.0));
+					// drawWorldPos(lT, vec4(1.0, 1.0, 1.0, 1.0));
 
 					newLine = false;
 				}
-
+				// drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
+				// drawWorldPos(lineOneStart, vec4(0.0,1.0,0.0,1.0));
 
 				// Check if position is in frustum and share with other threads
 				if(!any(isinf(lineStart))) {
 					// Find thread position
 					uint localCompactId = 0;
+					uint activeBallot = ballotThreadNV(true);
 					if(gl_LocalInvocationID.x > 0) {
-						localCompactId = bitCount(ballotThreadNV(true) << (32 - gl_LocalInvocationID.x));
+						localCompactId = bitCount(activeBallot << (32 - gl_LocalInvocationID.x));
 					}
 
 					currentPos = lineStart + (localCompactId + prevThreadsInLine) * horizontalStep;
@@ -261,8 +253,9 @@ void main()
 					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
 
 					// Check if in frustum
-					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheck, frustumPlaneNormals, frustumPoints);
+					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
+					
 					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0,0.0,1.0));
 
 					rng = rand_init(seedPos.x, seedPos.y);
@@ -271,7 +264,6 @@ void main()
 				} else {
 					outOfFrustum = true;
 				}
-
 				
 				if(prevThreadsInLine == 0 && ballotThreadNV(outOfFrustum) == ballotThreadNV(true) && lineNumber > 0) {
 					done = true;
@@ -293,7 +285,7 @@ void main()
 					lineNumber++;
 				}
 				
-				if (gl_LocalInvocationID.x == findMSB(ballotThreadNV(true))) {
+				if (gl_LocalInvocationID.x == findMSB(ballotThreadNV(!searching))) {
 					// last thread found position to draw at
 					lastPosition = currentPos + horizontalStep;
 				}
@@ -319,6 +311,7 @@ void main()
 			// get position of last thread to find the next cells to draw at
 			memoryBarrierShared();
 			lineOneStart = lastPosition;
+			newLine = true;
 		}
 		drawWorldPos(start, vec4(1.0,1.0,1.0,1.0));
 	}
@@ -366,6 +359,8 @@ bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir) {
 
 vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize) {
 	vec3 result = vec3(0.0);
+
+	
 	if(any(isinf(point))) {
 		result = vec3(1.0 / 0.0);
 	} else {
