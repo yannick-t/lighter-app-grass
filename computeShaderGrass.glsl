@@ -196,10 +196,11 @@ void main()
 		bool maskedOut;
 		int prevThreadsInLine;
 		int threadsIn;
-		uint ballot;
+		uint activeBallot;
+		uint localCompactId;
 		RandState rng;
 
-		for(int ba = 0;;ba++) {
+		for(int ba = 0;; ba++) {
 			// Find suitable position for thread to draw at by checking if the currentPos is in the frustum and sharing that information with all threads
 			outOfFrustum = true;
 			searching = true;
@@ -210,6 +211,7 @@ void main()
 			while(searching) {
 				if(newLine) {
 					vec3 lT = lineOneStart;
+					invalidIntersectionSteps = 0;
 					do {
 						invalidIntersectionSteps++;
 
@@ -235,13 +237,13 @@ void main()
 					newLine = false;
 				}
 				// drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
-				// drawWorldPos(lineOneStart, vec4(0.0,1.0,0.0,1.0));
+				// drawWorldPos(lineOneStart, vec4(1.0, 1.0, 0.0, 1.0));
 
 				// Check if position is in frustum and share with other threads
 				if(!any(isinf(lineStart))) {
 					// Find thread position
 					uint localCompactId = 0;
-					uint activeBallot = ballotThreadNV(true);
+					activeBallot = ballotThreadNV(true);
 					if(gl_LocalInvocationID.x > 0) {
 						localCompactId = bitCount(activeBallot << (32 - gl_LocalInvocationID.x));
 					}
@@ -249,18 +251,18 @@ void main()
 					currentPos = lineStart + (localCompactId + prevThreadsInLine) * horizontalStep;
 					
 
-					ivec2 iPos = ivec2(round(currentPos.xz / stepSize));
-					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
+					//ivec2 iPos = ivec2(round(currentPos.xz / stepSize));
+					//ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
 
 					// Check if in frustum
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
-					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0,0.0,1.0));
+					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
 
-					rng = rand_init(seedPos.x, seedPos.y);
-					maskedOut = rand_next(rng) < getBlend(currentPos, stepSize);
-					maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
+					//rng = rand_init(seedPos.x, seedPos.y);
+					//maskedOut = rand_next(rng) < getBlend(currentPos, stepSize);
+					//maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
 				} else {
 					outOfFrustum = true;
 				}
@@ -278,7 +280,6 @@ void main()
 				// thread not in frustum, go to next line
 				if(ballotThreadNV(outOfFrustum) != 0) {
 					// next line
-					invalidIntersectionSteps = 0;
 					prevThreadsInLine = 0;
 					newLine = true;
 					lineOneStart = lineTwoStart;
@@ -304,8 +305,8 @@ void main()
 			}
 
 			// found position -> draw
-			drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
-			// drawWorldPos(currentPos, vec4(1.0, 1.0, 1.0, 1.0));
+			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
+			drawWorldPos(currentPos, vec4(1.0, 1.0, 1.0, 1.0));
 
 
 			// get position of last thread to find the next cells to draw at
