@@ -9,6 +9,7 @@ const float Epsilon = 0.001;
 
 shared vec3 lastPosition;
 
+void drawGrassBlade(RandState rng, vec3 pos, float cellSize);
 float getStepSize(vec3 pos);
 float getBlend(vec3 pos, float curentStepSize);
 float distPointLine(vec3 a, vec3 d, vec3 point);
@@ -24,6 +25,9 @@ bool pointsOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 points[4]);
 bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point, float epsilon);
 void drawWorldPos(vec3 pos, vec4 colour);
 void drawNDC(vec3 ndc, vec4 colour);
+vec2 worldPosToImagePos(vec3 pos);
+vec2 ndcToImagePos(vec3 ndc);
+vec3 worldPosToNDC(vec3 pos);
 
 vec4 normalPointPlaneToNormalDistPlane(vec3 normal, vec3 point);
 
@@ -318,6 +322,33 @@ void main()
 	}
 }
 
+
+void drawGrassBlade(RandState rng, vec3 pos, float cellSize) {
+	// Random generation of grass blade properties
+	float minHeight = 0.2;
+	float maxHeight = 2;
+	float maxHorizontalControlPointDerivation = 0.7;
+	float cPHeight = minHeight + rand_next(rng) * (maxHeight - minHeight);
+	float tipHeight = minHeight + rand_next(rng) * (maxHeight - minHeight);
+	float maxHorizontalTipDerivation = 0.7;
+
+	vec3 root = pos + vec3((rand_next(rng) * cellSize), 0, (rand_next(rng) * cellSize));
+	vec3 controlPoint = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation),
+		cPHeight,
+		(rand_next(rng) * maxHorizontalControlPointDerivation));
+	vec3 tip = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation),
+		tipHeight,
+		(rand_next(rng) * maxHorizontalControlPointDerivation));
+
+
+	vec2 rootProj = worldPosToImagePos(root);
+	vec2 cPProj = worldPosToImagePos(controlPoint);
+	vec2 tipProj = worldPosToImagePos(tip);
+
+
+}
+
+
 // Get step size for regular grid by position representing the line currently worked on
 float getStepSize(vec3 pos) {
 	float dist = length(pos - camera.CamPos); //distPointLine(pos, grassConsts.PerpFtBDir, camera.CamPos);
@@ -487,19 +518,16 @@ bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point, float ep
 }
 
 void drawWorldPos(vec3 pos, vec4 colour) {
-		vec4 p1  = camera.ViewProj * vec4(pos, 1.0);
-		vec3 ndc = p1.xyz / p1.w;
-		drawNDC(ndc, colour);
+	vec3 ndc = worldPosToNDC(pos);
+	drawNDC(ndc, colour);
 }
 
 void drawNDC(vec3 ndc, vec4 colour) {
-	vec2 screenCoords = (ndc.xy + vec2(1.0, 1.0)) * 1/2;
-	vec2 texCoords = vec2(screenCoords.x, 1.0 - screenCoords.y);
-	if(0.0 <= texCoords.x && texCoords.x <= 1.0 &&
-		0.0 <= texCoords.y && texCoords.y <= 1.0 &&
-		ndc.z >= -0.0 && ndc.z <= 1.0) {
+	ivec2 imagePos = ivec2(ndcToImagePos(ndc));
+	if (-1.0 <= ndc.x && ndc.x <= 1.0 &&
+		-1.0 <= ndc.y && ndc.y <= 1.0 &&
+		ndc.z >= 0.0 && ndc.z <= 1.0) {
 
-		ivec2 imagePos = ivec2(texCoords * imageSize(result));
 		imageStore(result, imagePos, colour);
 		// imageStore(result, imagePos + ivec2(0, 1), colour);
 		// imageStore(result, imagePos + ivec2(1, 0), colour);
@@ -507,6 +535,20 @@ void drawNDC(vec3 ndc, vec4 colour) {
 	}
 }
 
+vec2 worldPosToImagePos(vec3 pos) {
+	vec3 ndc = worldPosToNDC(pos);
+	return ndcToImagePos(ndc);
+}
+
+vec2 ndcToImagePos(vec3 ndc) {
+	vec2 texCoords = vec2(screenCoords.x, 1.0 - screenCoords.y);
+	return imagePos = vec2(texCoords * imageSize(result));
+}
+
+vec3 worldPosToNDC(vec3 pos) {
+	vec4 p1 = camera.ViewProj * vec4(pos, 1.0);
+	return p1.xyz / p1.w;
+}
 
 vec4 normalPointPlaneToNormalDistPlane(vec3 normal, vec3 point) {
 	return vec4(normal, dot(normal, -point));
