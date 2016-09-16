@@ -40,8 +40,7 @@ struct CSGrassConstants
 	float Step;
 	// Distance at ehich the regular grid has the siye step
 	float StepDist;
-	// dist (from camera(horizontal)) for horizontal length to need to double to be the same length on the screen
-	float StepDoubleDist;
+	int DrawDebugInfo; // levels of debug info
 };
 
 struct Ray

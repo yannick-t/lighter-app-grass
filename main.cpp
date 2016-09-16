@@ -192,6 +192,7 @@ namespace main_ex {
 
 float csGrassStepSize = 0.06;
 float stepDist = 2;
+float drawDebugInfo = 0;
 
 int run() {
 	ogl::Platform platform(3, 3);
@@ -351,6 +352,7 @@ int run() {
 			ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
 			ui.addSlider(&csGrassStepSize, "initial grid size", csGrassStepSize, 1.0f, csGrassStepSize, 0.1f);
 			ui.addSlider(&stepDist, "distance for the step size to double", stepDist, 10.0f, stepDist, 0.1f);
+			ui.addSlider(&drawDebugInfo, "level of debug info", drawDebugInfo, 10.0f, drawDebugInfo, 1.0f);
 			//			if (auto uiUnion = ui::Union(ui)) 
 			{
 				// ui.addButton(3, "test button", nullptr);
@@ -518,6 +520,7 @@ int run() {
 			csGrassConstants.Step = csGrassStepSize;
 			csGrassConstants.StepDist = stepDist;
 			csGrassConstants.TileDivisor = tileDivisor;
+			csGrassConstants.DrawDebugInfo = (int) drawDebugInfo;
 			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
 
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
