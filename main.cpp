@@ -77,7 +77,7 @@ struct Camera {
 		: fov(90.0f)
 		  , aspect(1.0f)
 		  , nearPlane(0.1f)
-		  , farPlane(100.0f) {
+		  , farPlane(1000.0f) {
 	}
 
 	void lookTo(glm::vec3 const& pos, glm::vec3 const& where, glm::vec3 const& up) {

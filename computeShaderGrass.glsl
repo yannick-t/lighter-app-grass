@@ -121,7 +121,13 @@ void main()
 		}
 	}
 
-	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 1*/) {
+
+	if(gl_GlobalInvocationID.x == 0) {
+		RandState rng = rand_init(0, 0);
+		//drawGrassBlade(rng, vec3(0), 1);
+	}
+
+	if(intersectionCount > 3/* && gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 1*/) {
 
 		// debug
 		vec3 p = vec3(0);
@@ -271,20 +277,24 @@ void main()
 					currentPos = lineStart + (localCompactId + prevThreadsInLine) * horizontalStep;
 					
 
-					ivec2 iPos = ivec2(round(currentPos.xz / stepSize));
+					ivec2 iPos = ivec2((currentPos.xz / stepSize) + vec2(0.5));
 					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
 
 					// Check if in frustum
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
-					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
+					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0))
 
-					localStepSize = getStepSize(length(currentPos - camera.CamPos));
-
+					// create blend between cells of different stepSizes by masking them out 
 					rng = rand_init(seedPos.x, seedPos.y);
-					maskedOut = rand_next(rng) < getBlend(currentPos, stepSize);
+					// maskedOut = rand_next(rng) < getBlend(currentPos, stepSize);
 					maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
+
+					// mask out cells if the stepSize used is too small
+					localStepSize = getStepSize(length(currentPos - camera.CamPos));
+					maskedOut = maskedOut || localStepSize > stepSize;
+					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int((localStepSize / stepSize) - 0.5))) != 0;
 				} else {
 					outOfFrustum = true;
 				}
@@ -327,9 +337,9 @@ void main()
 			}
 
 			// found position -> draw
-			drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
-			// drawWorldPos(currentPos, vec4(1.0, 1.0, 1.0, 1.0));
-
+			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
+			drawWorldPos(currentPos, vec4(1.0, 1.0, 1.0, 1.0));
+			// drawGrassBlade(rng, currentPos, localStepSize);
 
 			// get position of last thread to find the next cells to draw at
 			memoryBarrierShared();
@@ -341,13 +351,17 @@ void main()
 
 
 void drawGrassBlade(RandState rng, vec3 pos, float cellSize) {
-	// Random generation of grass blade properties
+	int curveSubdivision = 10;
+
 	float minHeight = 0.2;
-	float maxHeight = 2;
+	float maxHeight = 2.0;
 	float maxHorizontalControlPointDerivation = 0.7;
+	float maxHorizontalTipDerivation = 0.7;
+
+	// Random generation of grass blade properties
 	float cPHeight = minHeight + rand_next(rng) * (maxHeight - minHeight);
 	float tipHeight = minHeight + rand_next(rng) * (maxHeight - minHeight);
-	float maxHorizontalTipDerivation = 0.7;
+	
 
 	vec3 root = pos + vec3((rand_next(rng) * cellSize), 0, (rand_next(rng) * cellSize));
 	vec3 controlPoint = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation),
@@ -362,7 +376,21 @@ void drawGrassBlade(RandState rng, vec3 pos, float cellSize) {
 	vec2 cPProj = worldPosToImagePos(controlPoint);
 	vec2 tipProj = worldPosToImagePos(tip);
 
+	if(rootProj.x < 0) {
+		return;
+	}
+	// subdivide curve and draw line segments
+	vec2 p0 = rootProj;
+	vec2 p1;
+	
+	for(int i = 1; i < curveSubdivision; i++) {
+		float u = float(i) / curveSubdivision;
+		p1 = pow(1 - u, 2) * rootProj + 2 * (1 - u) * u * cPProj + pow(u, 2) * tipProj;
 
+		drawImageLine(p0, p1, vec4(0.1, 1.0, 0.2, 1.0));
+		p0 = p1;
+	}
+	drawImageLine(p1, tipProj, vec4(0.1, 1.0, 0.2, 1.0));
 }
 
 
@@ -574,7 +602,11 @@ void drawImageLine(vec2 imageStart, vec2 imageEnd, vec4 colour) {
 
 vec2 worldPosToImagePos(vec3 pos) {
 	vec3 ndc = worldPosToNDC(pos);
-	return ndcToImagePos(ndc);
+	if(ndc.z < 0 || ndc.z > 1) {
+		return vec2(-1);
+	} else {
+		return ndcToImagePos(ndc);
+	}
 }
 
 vec2 ndcToImagePos(vec3 ndc) {
