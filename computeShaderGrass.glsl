@@ -54,7 +54,7 @@ void main()
 {
 	vec2 tileCount = ivec2(imageSize(result) / grassConsts.TileDivisor);
 
-	if(grassConsts.DrawDebugInfo > 1) {
+	if(grassConsts.DrawDebugInfo >= 2) {
 		vec2 frustumCorner = vec2((gl_WorkGroupID.x) / tileCount.x * imageSize(result).x, (1 - (gl_WorkGroupID.y) / tileCount.y) * imageSize(result).y);
 		vec2 tileSize = imageSize(result) / tileCount;
 
@@ -127,7 +127,14 @@ void main()
 		//drawGrassBlade(rng, vec3(0), 1);
 	}
 
-	if(intersectionCount > 3/* && gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 1*/) {
+	if(intersectionCount > 3/* && gl_WorkGroupID.x == 0 && gl_WorkGroupID.y == 2 || gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 1*/) {
+
+		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
+		vec3 lineDirection = grassConsts.PerpFtBDir;
+		// If necessary mirror vector so it points roughly the right direction
+		if(dot(lineDirection, camera.CamDir) < 0.0) {
+			lineDirection = -lineDirection;
+		}
 
 		// debug
 		vec3 p = vec3(0);
@@ -163,16 +170,9 @@ void main()
 
 		vec3 start = intersections[index];
 
-		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing to second nearest intersection point
-		vec3 lineDirection = grassConsts.PerpFtBDir;
-		// If necessary mirror vector so it points roughly the right direction
-		if(dot(lineDirection, intersections[indexS] - intersections[index]) < 0.0) {
-			lineDirection = -lineDirection;
-		}
-
-		stepSize = getStepSize(distPointRay(start, grassConsts.PerpFtBDir, camera.CamPos));
+		stepSize = getStepSize(distPointRay(start, lineDirection, camera.CamPos));
 		// Round to next cell position 
-		start = floorGridPointByDir(start, grassConsts.FtBDirection + lineDirection, stepSize);
+		start = floorGridPointByDir(start, lineDirection, stepSize);
 
 		// Find planes of the frustum that are on in the general direction of the lineDirection vector
 		// Check these during iteration to find out if we're outside of the frustum
@@ -189,7 +189,7 @@ void main()
 		}
 
 
-		if(grassConsts.DrawDebugInfo > 1) {
+		if(grassConsts.DrawDebugInfo >= 1.0) {
 			// debug - draw frustum intersections
 			for(int i = 0; i < intersectionCount; i++) {
 				if(i == indexS) {
@@ -199,7 +199,6 @@ void main()
 				}
 			}
 		}
-		
 
 		// Iterate through cells
 		int i = 0;
@@ -254,7 +253,7 @@ void main()
 							break;
 						}
 					} while(any(isinf(lT))); // search for a valid intersection
-					lineTwoStart = floorGridPointByDir(lT, horizontalStep, stepSize) - horizontalStep / 2;
+					lineTwoStart = floorGridPointByDir(lT - horizontalStep / 2, horizontalStep, stepSize);
 					
 					lineStart = lineOneStart;
 					
@@ -263,7 +262,7 @@ void main()
 					newLine = false;
 				}
 				// drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
-				// drawWorldPos(lineOneStart, vec4(1.0, 1.0, 0.0, 1.0));
+				drawWorldPos(lineOneStart, vec4(1.0, 1.0, 0.0, 1.0));
 
 				// Check if position is in frustum and share with other threads
 				if(!any(isinf(lineStart))) {
@@ -281,6 +280,7 @@ void main()
 					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
 
 					// Check if in frustum
+					localStepSize = getStepSize(length(currentPos - camera.CamPos));
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
@@ -292,8 +292,7 @@ void main()
 					maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
 
 					// mask out cells if the stepSize used is too small
-					localStepSize = getStepSize(length(currentPos - camera.CamPos));
-					maskedOut = maskedOut || localStepSize > stepSize;
+					// maskedOut = maskedOut || localStepSize > stepSize;
 					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int((localStepSize / stepSize) - 0.5))) != 0;
 				} else {
 					outOfFrustum = true;
@@ -403,7 +402,7 @@ float getStepSize(float dist) {
 	} else {
 		factor = pow(2, floor(log2(factor)));
 	}
-	return factor * grassConsts.Step;
+	return 1 * grassConsts.Step;
 }
 
 float getBlend(vec3 pos, float currentStepSize) {
