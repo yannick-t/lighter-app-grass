@@ -127,7 +127,7 @@ void main()
 		//drawGrassBlade(rng, vec3(0), 1);
 	}
 
-	if(intersectionCount > 3/* && gl_WorkGroupID.x == 0 && gl_WorkGroupID.y == 2 || gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 1*/) {
+	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 1 || gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 1*/) {
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
 		vec3 lineDirection = grassConsts.PerpFtBDir;
@@ -154,25 +154,12 @@ void main()
 				index = i;
 			}
 		}
-		// Calculate second smallest minumum by ftb
-		int indexS = 0;
-		if(index == 0) {
-			indexS = 1;
-		}
-		for(int i = 0; i < intersectionCount; i++) {
-			if(i == index || i == indexS) {
-				continue;
-			}
-			if(lessThanByDir(intersections[i], intersections[indexS], grassConsts.FtBDirection)) {
-				indexS = i;
-			}
-		}
 
 		vec3 start = intersections[index];
 
 		stepSize = getStepSize(distPointRay(start, lineDirection, camera.CamPos));
 		// Round to next cell position 
-		start = floorGridPointByDir(start, lineDirection, stepSize);
+		start = floorGridPointByDir(start, lineDirection + grassConsts.FtBDirection, stepSize);
 
 		// Find planes of the frustum that are on in the general direction of the lineDirection vector
 		// Check these during iteration to find out if we're outside of the frustum
@@ -185,14 +172,14 @@ void main()
 			frustumPlanesToCheckLineNegated[i] = !frustumPlanesToCheckLine[i];
 			frustumPlanesToCheckFtB[i] = dot(grassConsts.PerpFtBDir, frustumPlaneNormals[i]) >= 0;
 			frustumPlanesToCheck[i] = frustumPlanesToCheckLine[i] || frustumPlanesToCheckFtB[i];
-			// drawNDC(vec3(0.5 + float(i) / 24, 0.5, 0.5), vec4(frustumPlanesToCheck[i] ? 0.0 : 1.0, frustumPlanesToCheck[i] ? 1.0 : 0.0, 0.0, 1.0));
+			// drawNDC(vec3(0.5 + float(i) / 24, 0.5, 0.5), vec4(frustumPlanesToCheckLine[i] ? 0.0 : 1.0, frustumPlanesToCheckLine[i] ? 1.0 : 0.0, 0.0, 1.0));
 		}
 
 
 		if(grassConsts.DrawDebugInfo >= 1.0) {
 			// debug - draw frustum intersections
 			for(int i = 0; i < intersectionCount; i++) {
-				if(i == indexS) {
+				if (i == index) {
 					drawWorldPos(intersections[i], vec4(1.0, 1.0, 1.0, 1.0));
 				} else {
 					drawWorldPos(intersections[i], vec4(0.0, 1.0, 1.0, 1.0)); // Draw intersection points
@@ -252,9 +239,13 @@ void main()
 						if(invalidIntersectionSteps > maxInvalidIntersectionSteps) {
 							break;
 						}
+
+						if(any(isinf(lT))) {
+							// drawNDC(vec3(0.0, 0.0, 0.5), vec4(1.0, 0.0, 0.0, 1.0));
+						}
 					} while(any(isinf(lT))); // search for a valid intersection
-					lineTwoStart = floorGridPointByDir(lT - horizontalStep / 2, horizontalStep, stepSize);
-					
+					lineTwoStart = floorGridPointByDir(lT, horizontalStep, stepSize);
+
 					lineStart = lineOneStart;
 					
 					// drawWorldPos(lT, vec4(1.0, 1.0, 1.0, 1.0));
@@ -262,7 +253,7 @@ void main()
 					newLine = false;
 				}
 				// drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
-				drawWorldPos(lineOneStart, vec4(1.0, 1.0, 0.0, 1.0));
+				// drawWorldPos(lineOneStart, vec4(1.0, 1.0, 0.0, 1.0));
 
 				// Check if position is in frustum and share with other threads
 				if(!any(isinf(lineStart))) {
@@ -284,7 +275,7 @@ void main()
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
-					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0))
+					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
 
 					// create blend between cells of different stepSizes by masking them out 
 					rng = rand_init(seedPos.x, seedPos.y);
@@ -292,8 +283,10 @@ void main()
 					maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
 
 					// mask out cells if the stepSize used is too small
-					// maskedOut = maskedOut || localStepSize > stepSize;
-					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int((localStepSize / stepSize) - 0.5))) != 0;
+					if(!maskedOut) {
+						maskedOut = localStepSize > stepSize;
+						maskedOut = maskedOut && ((iPos.x | iPos.y) & (int((localStepSize / stepSize) - 0.5))) != 0;
+					}
 				} else {
 					outOfFrustum = true;
 				}
@@ -402,7 +395,7 @@ float getStepSize(float dist) {
 	} else {
 		factor = pow(2, floor(log2(factor)));
 	}
-	return 1 * grassConsts.Step;
+	return factor * grassConsts.Step;
 }
 
 float getBlend(vec3 pos, float currentStepSize) {
@@ -489,21 +482,25 @@ vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6],
 		intersection = ray.Start + t * ray.Dir;
 
 		// test if intersection is in the frustum
-		inFrustum = true;
-		int dontCheck = i + ((i % 2 == 1) ? -1 : 1);// plane index opposite of current plane
-		for(int j = 0; j < 6; j++) {
-			if(j == i || j == dontCheck) {
-				continue;
+		if(isinf(t)) {
+			inFrustum = false;
+		} else {
+			inFrustum = true;
+			int dontCheck = i + ((i % 2 == 1) ? -1 : 1);// plane index opposite of current plane
+			for(int j = 0; j < 6; j++) {
+				if(j == i || j == dontCheck) {
+					continue;
+				}
+
+				if(pointOutsideOfPlane(getPointOnFrustumPlane(j, frustumPoints), frustumPlaneNormals[j], intersection, Epsilon)) {
+					inFrustum = false;
+					break;
+				}
 			}
 
-			if(pointOutsideOfPlane(getPointOnFrustumPlane(j, frustumPoints), frustumPlaneNormals[j], intersection, Epsilon)) {
-				inFrustum = false;
+			if(inFrustum) {
 				break;
 			}
-		}
-
-		if(inFrustum) {
-			break;
 		}
 	}
 
