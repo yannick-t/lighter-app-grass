@@ -202,7 +202,7 @@ void main()
 
 		// Iterate through cells
 		int i = 0;
-		int maxIt = 1000;
+		int maxIt = 512;
 		int invalidIntersectionSteps = 0;
 		int maxInvalidIntersectionSteps = 2;
 
@@ -294,9 +294,9 @@ void main()
 
 					currentPos = lineStart + (localCompactId + prevThreadsInLine) * horizontalStep;
 					
-
 					ivec2 iPos = ivec2(round((currentPos.xz / stepSize)));
 					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
+
 
 					// Check if in frustum
 					localStepSize = getStepSize(distance(currentPos, camera.CamPos), blend);
@@ -305,17 +305,19 @@ void main()
 					
 					//drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
 
-					maskedOut = false;
-					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
-					//rng = rand_init(seedPos.x, seedPos.y);
-					//maskedOut = rand_next(rng) < blend;
-					//maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
+					
+					// mask out cells if the stepSize used is too small for the cell
+					maskedOut = localStepSize > stepSize;
+					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
 
-					// mask out cells if the stepSize used is too small
+					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
 					if(!maskedOut) {
-						maskedOut = localStepSize > stepSize;
-						maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
+						iPos = ivec2(round((currentPos.xz / localStepSize)));
+						rng = rand_init(seedPos.x, seedPos.y);
+						maskedOut = rand_next(rng) < blend;
+						maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
 					}
+					
 				} else {
 					outOfFrustum = true;
 				}
@@ -348,7 +350,7 @@ void main()
 
 				i++;
 				if (i >= maxIt) {
-					drawWorldPos(p / 8, vec4(1.0, 1.0, 0.0, 1.0));
+					if(grassConsts.DrawDebugInfo >= 3) drawWorldPos(p / 8, vec4(1.0, 1.0, 0.0, 1.0));
 
 					done = true;
 					break;
