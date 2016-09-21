@@ -127,7 +127,7 @@ void main()
 		//drawGrassBlade(rng, vec3(0), 1);
 	}
 
-	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 5 && gl_WorkGroupID.y == 2 /*|| gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 1*/) {
+	if(intersectionCount > 3 && gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 0 /*|| gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 4*/) {
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
 		vec3 lineDirection = grassConsts.PerpFtBDir;
@@ -158,7 +158,7 @@ void main()
 
 		vec3 start = intersections[index];
 
-		stepSize = getStepSize(distPointRay(start, lineDirection, camera.CamPos), blend);
+		stepSize = grassConsts.Step; //getStepSize(1/*distPointRay(start, lineDirection, camera.CamPos)*/, blend);
 		// Round to next cell position 
 		if(grassConsts.FtBDirection.x != 0.0 && grassConsts.FtBDirection.z != 0) {
 			// diagonal workaround
@@ -173,6 +173,8 @@ void main()
 		} else {
 			start = floorGridPointByDir(start, grassConsts.FtBDirection, stepSize);
 		}
+
+		drawWorldPos(start, vec4(0.0,0.0,1.0,1.0));
 
 		// Find planes of the frustum that are on in the general direction of the lineDirection vector
 		// Check these during iteration to find out if we're outside of the frustum
@@ -202,9 +204,11 @@ void main()
 
 		// Iterate through cells
 		int i = 0;
-		int maxIt = 512;
+		int maxIt = 5120;
+		int searchIt;
+		int maxItPerSearch = 32;
 		int invalidIntersectionSteps = 0;
-		int maxInvalidIntersectionSteps = 2;
+		int maxInvalidIntersectionSteps = 5;
 
 		vec3 ftbStep = grassConsts.FtBDirection * stepSize;
 		vec3 horizontalStep;
@@ -234,6 +238,7 @@ void main()
 			maskedOut = false;
 			prevThreadsInLine = 0;
 			lineNumber = 0;
+			searchIt = 0;
 			stepSize = getStepSize(distPointRay(lineOneStart, lineDirection, camera.CamPos), blend);
 
 			while(searching) {
@@ -274,12 +279,12 @@ void main()
 						lineStart = lineOneStart;
 					}
 					
-					//drawWorldPos(lT, vec4(1.0, 1.0, 1.0, 1.0));
+					drawWorldPos(lT, vec4(1.0, 1.0, 1.0, 1.0));
 
 					newLine = false;
 					newGroup = false;
 				}
-				//drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
+				// drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
 				//drawWorldPos(start, vec4(0.0,0.0,1.0,1.0));
 				//drawWorldPos(lineStart, vec4(1.0, 1.0, 0.0, 1.0));
 
@@ -303,25 +308,25 @@ void main()
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
-					//drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
+					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
 
 					
 					// mask out cells if the stepSize used is too small for the cell
-					maskedOut = localStepSize > stepSize;
+					// maskedOut = localStepSize > stepSize;
 					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
 
 					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
 					if(!maskedOut) {
 						iPos = ivec2(round((currentPos.xz / localStepSize)));
 						rng = rand_init(seedPos.x, seedPos.y);
-						maskedOut = rand_next(rng) < blend;
+						// maskedOut = rand_next(rng) < blend;
 						maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
 					}
 					
 				} else {
 					outOfFrustum = true;
 				}
-				
+			
 				
 				if(prevThreadsInLine == 0 && ballotThreadNV(outOfFrustum) == ballotThreadNV(true) && lineNumber > 0) {
 					done = true;
@@ -349,7 +354,8 @@ void main()
 				}
 
 				i++;
-				if (i >= maxIt) {
+				searchIt++;
+				if (i >= maxIt/* || searchIt > maxItPerSearch*/) {
 					if(grassConsts.DrawDebugInfo >= 3) drawWorldPos(p / 8, vec4(1.0, 1.0, 0.0, 1.0));
 
 					done = true;
@@ -365,15 +371,16 @@ void main()
 			vec3 quad[4] = {currentPos, currentPos + vec3(0.0, 0.0, localStepSize), currentPos + vec3(localStepSize, 0.0, localStepSize),
 					currentPos + vec3(localStepSize, 0.0, 0.0)};
 			for(int l = 0; l < 4; l++) {
-				// drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
+				//drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 			}
 			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
-			drawWorldPos(currentPos, vec4(/*localStepSize > stepSize ? 0.0 :*/ 1.0, 1.0, 1.0, 1.0));
+			// drawWorldPos(currentPos, vec4(/*localStepSize > stepSize ? 0.0 :*/ 1.0, 1.0, 1.0, 1.0));
 			// drawGrassBlade(rng, currentPos, localStepSize);
 
 			// get position of last thread to find the next cells to draw at
 			memoryBarrierShared();
 			lineOneStart = lastPosition;
+			drawWorldPos(lineOneStart, vec4(1.0, 1.0, 0.0, 1.0));
 			newLine = false;
 			newGroup = true;
 		}
