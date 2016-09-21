@@ -10,11 +10,11 @@ const float Epsilon = 0.001;
 shared vec3 lastPosition;
 
 void drawGrassBlade(RandState rng, vec3 pos, float cellSize);
-float getStepSize(float dist);
-float getBlend(vec3 pos, float curentStepSize);
+float getStepSize(float dist, out float blend);
 float distPointRay(vec3 origin, vec3 direction, vec3 point);
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir);
 vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize);
+vec3 floorGridPointByDirOffset(vec3 point, vec3 dir, float stepSize, vec2 gridOffset);
 bool[6] negate(bool array[6]);
 float intersectPlane(Ray ray, vec3 point, vec3 normal);
 vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
@@ -127,7 +127,7 @@ void main()
 		//drawGrassBlade(rng, vec3(0), 1);
 	}
 
-	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 16 && gl_WorkGroupID.y == 3 || gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 1*/) {
+	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 5 && gl_WorkGroupID.y == 2 /*|| gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 1*/) {
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
 		vec3 lineDirection = grassConsts.PerpFtBDir;
@@ -145,6 +145,7 @@ void main()
 		// debug
 
 		float stepSize = grassConsts.Step;
+		float blend;
 
 		// Find start point for iteration (minimum by ftb)
 		int index = 0;
@@ -157,11 +158,18 @@ void main()
 
 		vec3 start = intersections[index];
 
-		stepSize = getStepSize(distPointRay(start, lineDirection, camera.CamPos));
+		stepSize = getStepSize(distPointRay(start, lineDirection, camera.CamPos), blend);
 		// Round to next cell position 
 		if(grassConsts.FtBDirection.x != 0.0 && grassConsts.FtBDirection.z != 0) {
-			// diagonal
-			start = floorGridPointByDir(start, grassConsts.FtBDirection, stepSize / 2);
+			// diagonal workaround
+			vec3 s1 = floorGridPointByDirOffset(start, grassConsts.FtBDirection, stepSize, vec2(stepSize / 2));
+			vec3 s2 = floorGridPointByDir(start, grassConsts.FtBDirection, stepSize);
+
+			if(distance(start, s1) < distance(start, s2)) {
+				start = s1;
+			} else {
+				start = s2;
+			}
 		} else {
 			start = floorGridPointByDir(start, grassConsts.FtBDirection, stepSize);
 		}
@@ -196,7 +204,7 @@ void main()
 		int i = 0;
 		int maxIt = 1000;
 		int invalidIntersectionSteps = 0;
-		int maxInvalidIntersectionSteps = 1;
+		int maxInvalidIntersectionSteps = 2;
 
 		vec3 ftbStep = grassConsts.FtBDirection * stepSize;
 		vec3 horizontalStep;
@@ -226,7 +234,7 @@ void main()
 			maskedOut = false;
 			prevThreadsInLine = 0;
 			lineNumber = 0;
-			stepSize = getStepSize(distPointRay(lineOneStart, lineDirection, camera.CamPos));
+			stepSize = getStepSize(distPointRay(lineOneStart, lineDirection, camera.CamPos), blend);
 
 			while(searching) {
 				if(newLine || newGroup) {
@@ -252,8 +260,9 @@ void main()
 							break;
 						}
 					} while(any(isinf(lT))); // search for a valid intersection
-					stepSizeLT = getStepSize(distPointRay(lT, lineDirection, camera.CamPos));
-					lineTwoStart = floorGridPointByDir(lT, lineDirection, stepSizeLT);
+					stepSizeLT = getStepSize(distPointRay(lT - (invalidIntersectionSteps - 1) * ftbStep, lineDirection, camera.CamPos), blend);
+					lineTwoStart = floorGridPointByDir(lT - (invalidIntersectionSteps - 1) * ftbStep, lineDirection, stepSizeLT);
+					
 					
 					if(newLine) {
 						if(lessThanByDir(lT, lineOneStart, horizontalStep)) {
@@ -265,13 +274,14 @@ void main()
 						lineStart = lineOneStart;
 					}
 					
-					// drawWorldPos(lT, vec4(1.0, 1.0, 1.0, 1.0));
+					//drawWorldPos(lT, vec4(1.0, 1.0, 1.0, 1.0));
 
 					newLine = false;
 					newGroup = false;
 				}
-				// drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
-				// drawWorldPos(lineStart, vec4(1.0, 1.0, 0.0, 1.0));
+				//drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
+				//drawWorldPos(start, vec4(0.0,0.0,1.0,1.0));
+				//drawWorldPos(lineStart, vec4(1.0, 1.0, 0.0, 1.0));
 
 				// Check if position is in frustum and share with other threads
 				if(!any(isinf(lineStart))) {
@@ -289,16 +299,16 @@ void main()
 					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
 
 					// Check if in frustum
-					localStepSize = getStepSize(distance(currentPos, camera.CamPos));
+					localStepSize = getStepSize(distance(currentPos, camera.CamPos), blend);
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
-					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
+					//drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
 
 					maskedOut = false;
 					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
 					//rng = rand_init(seedPos.x, seedPos.y);
-					//maskedOut = rand_next(rng) < getBlend(currentPos, localStepSize);
+					//maskedOut = rand_next(rng) < blend;
 					//maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
 
 					// mask out cells if the stepSize used is too small
@@ -414,25 +424,17 @@ void drawGrassBlade(RandState rng, vec3 pos, float cellSize) {
 
 
 // Get step size for regular grid by distance to the camera
-float getStepSize(float dist) {
+float getStepSize(float dist, out float blend) {
 	float factor = dist / grassConsts.StepDist; //grassConsts.StepDoubleDist;
 	
 	if(factor <= 1) {
+		blend = 0;
 		factor = 1;
 	} else {
-		factor = pow(2, floor(log2(factor)));
+		blend = modf(log2(factor), factor);
+		factor = pow(2, factor);
 	}
 	return factor * grassConsts.Step;
-}
-
-float getBlend(vec3 pos, float currentStepSize) {
-	float blend;
-	float dist = length(pos - camera.CamPos);
-	float factor = dist / grassConsts.StepDist; 
-
-	blend = log2(factor / (currentStepSize / grassConsts.Step));
-
-	return blend;
 }
 
 float distPointRay(vec3 origin, vec3 direction, vec3 point) {
@@ -452,7 +454,12 @@ bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir) {
 }
 
 vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize) {
+	return floorGridPointByDirOffset(point, dir, stepSize, vec2(0,0));
+}
+
+vec3 floorGridPointByDirOffset(vec3 point, vec3 dir, float stepSize, vec2 gridOffset) {
 	vec3 result = vec3(0.0);
+	point = vec3(point.x + gridOffset.x, point.y, point.z + gridOffset.y);
 
 	if(any(isinf(point))) {
 		result = vec3(1.0 / 0.0);
@@ -474,7 +481,7 @@ vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize) {
 		}
 	}
 
-	return result;
+	return result - vec3(gridOffset.x, 0.0, gridOffset.y);
 }
 
 bool[6] negate(bool array[6]) {
