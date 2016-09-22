@@ -127,7 +127,7 @@ void main()
 		//drawGrassBlade(rng, vec3(0), 1);
 	}
 
-	if(intersectionCount > 3 && gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 0 /*|| gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 4*/) {
+	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 0 /*|| gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 4*/) {
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
 		vec3 lineDirection = grassConsts.PerpFtBDir;
@@ -231,6 +231,8 @@ void main()
 		float localStepSize;
 		RandState rng;
 
+		int debugTest = 0;
+
 		for(int ba = 0;; ba++) {
 			// Find suitable position for thread to draw at by checking if the currentPos is in the frustum and sharing that information with all threads
 			outOfFrustum = true;
@@ -242,14 +244,14 @@ void main()
 			stepSize = getStepSize(distPointRay(lineOneStart, lineDirection, camera.CamPos), blend);
 
 			while(searching) {
+
 				if(newLine || newGroup) {
-					// Calculate step size
-					
+					// Calculate steps
 					ftbStep = grassConsts.FtBDirection * stepSize;
 					horizontalStep = lineDirection * stepSize;
 
-					vec3 lT = lineOneStart;
-					vec3 tempPos = lT;
+					vec3 lT;
+					vec3 tempPos = lineOneStart;
 					vec3 intersectionStep = vec3(0);
 					invalidIntersectionSteps = 0;
 					do {
@@ -265,8 +267,9 @@ void main()
 							break;
 						}
 					} while(any(isinf(lT))); // search for a valid intersection
-					stepSizeLT = getStepSize(distPointRay(lT - (invalidIntersectionSteps - 1) * ftbStep, lineDirection, camera.CamPos), blend);
-					lineTwoStart = floorGridPointByDir(lT - (invalidIntersectionSteps - 1) * ftbStep, lineDirection, stepSizeLT);
+					lT = lT - (invalidIntersectionSteps - 1) * ftbStep;
+					stepSizeLT = getStepSize(distPointRay(lT, lineDirection, camera.CamPos), blend);
+					lineTwoStart = floorGridPointByDir(lT, lineDirection, stepSizeLT);
 					
 					
 					if(newLine) {
@@ -279,14 +282,14 @@ void main()
 						lineStart = lineOneStart;
 					}
 					
-					drawWorldPos(lT, vec4(1.0, 1.0, 1.0, 1.0));
+					//drawWorldPos(lT, vec4(1.0, 1.0, 1.0, 1.0));
 
 					newLine = false;
 					newGroup = false;
 				}
 				// drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
 				//drawWorldPos(start, vec4(0.0,0.0,1.0,1.0));
-				//drawWorldPos(lineStart, vec4(1.0, 1.0, 0.0, 1.0));
+				// drawWorldPos(lineStart, vec4(stepSize <= grassConsts.Step ? 1.0 : 0.0, 1.0, 0.0, 1.0));
 
 				// Check if position is in frustum and share with other threads
 				if(!any(isinf(lineStart))) {
@@ -297,31 +300,31 @@ void main()
 						localCompactId = bitCount(activeBallot << (32 - gl_LocalInvocationID.x));
 					}
 
-					currentPos = lineStart + (localCompactId + prevThreadsInLine) * horizontalStep;
+					currentPos = lineStart + (localCompactId/* + prevThreadsInLine*/) * horizontalStep;
 					
-					ivec2 iPos = ivec2(round((currentPos.xz / stepSize)));
-					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
+					//ivec2 iPos = ivec2(round((currentPos.xz / stepSize)));
+					//ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
 
 
 					// Check if in frustum
-					localStepSize = getStepSize(distance(currentPos, camera.CamPos), blend);
+					//localStepSize = getStepSize(distance(currentPos, camera.CamPos), blend);
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
-					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
+					// if (stepSize > grassConsts.Step) drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
 
 					
 					// mask out cells if the stepSize used is too small for the cell
 					// maskedOut = localStepSize > stepSize;
-					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
+					//maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
 
 					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
-					if(!maskedOut) {
-						iPos = ivec2(round((currentPos.xz / localStepSize)));
-						rng = rand_init(seedPos.x, seedPos.y);
+					//if(!maskedOut) {
+						//iPos = ivec2(round((currentPos.xz / localStepSize)));
+						//rng = rand_init(seedPos.x, seedPos.y);
 						// maskedOut = rand_next(rng) < blend;
-						maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
-					}
+						//maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
+					//}
 					
 				} else {
 					outOfFrustum = true;
@@ -373,14 +376,22 @@ void main()
 			for(int l = 0; l < 4; l++) {
 				//drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 			}
-			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
-			// drawWorldPos(currentPos, vec4(/*localStepSize > stepSize ? 0.0 :*/ 1.0, 1.0, 1.0, 1.0));
+			// if (stepSize > grassConsts.Step) drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
+			drawWorldPos(currentPos, vec4(1.0, 1.0, 1.0, 1.0));
 			// drawGrassBlade(rng, currentPos, localStepSize);
+
 
 			// get position of last thread to find the next cells to draw at
 			memoryBarrierShared();
 			lineOneStart = lastPosition;
-			drawWorldPos(lineOneStart, vec4(1.0, 1.0, 0.0, 1.0));
+			if(stepSize > grassConsts.Step) {  
+				debugTest += 1;
+				//drawWorldPos(lineOneStart, vec4(1.0, 1.0 , 0.0, 1.0)); 
+
+				if(debugTest > 1) {
+					//break;
+				}
+			}
 			newLine = false;
 			newGroup = true;
 		}
