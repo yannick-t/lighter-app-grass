@@ -174,8 +174,6 @@ void main()
 			start = floorGridPointByDir(start, grassConsts.FtBDirection, stepSize);
 		}
 
-		drawWorldPos(start, vec4(0.0,0.0,1.0,1.0));
-
 		// Find planes of the frustum that are on in the general direction of the lineDirection vector
 		// Check these during iteration to find out if we're outside of the frustum
 		bool frustumPlanesToCheck[6];
@@ -204,7 +202,7 @@ void main()
 
 		// Iterate through cells
 		int i = 0;
-		int maxIt = 5120;
+		int maxIt = 1000;
 		int searchIt;
 		int maxItPerSearch = 32;
 		int invalidIntersectionSteps = 0;
@@ -229,6 +227,8 @@ void main()
 		uint localCompactId;
 		float stepSizeLT;
 		float localStepSize;
+		float rand;
+		float alpha;
 		RandState rng;
 
 		int debugTest = 0;
@@ -244,6 +244,7 @@ void main()
 			stepSize = getStepSize(distPointRay(lineOneStart, lineDirection, camera.CamPos), blend);
 
 			while(searching) {
+				alpha = 1.0;
 
 				if(newLine || newGroup) {
 					// Calculate steps
@@ -300,14 +301,14 @@ void main()
 						localCompactId = bitCount(activeBallot << (32 - gl_LocalInvocationID.x));
 					}
 
-					currentPos = lineStart + (localCompactId/* + prevThreadsInLine*/) * horizontalStep;
+					currentPos = lineStart + (localCompactId + prevThreadsInLine) * horizontalStep;
 					
-					//ivec2 iPos = ivec2(round((currentPos.xz / stepSize)));
-					//ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
+					ivec2 iPos = ivec2(round((currentPos.xz / stepSize)));
+					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
 
 
 					// Check if in frustum
-					//localStepSize = getStepSize(distance(currentPos, camera.CamPos), blend);
+					localStepSize = getStepSize(distance(currentPos, camera.CamPos), blend);
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
@@ -315,16 +316,23 @@ void main()
 
 					
 					// mask out cells if the stepSize used is too small for the cell
-					// maskedOut = localStepSize > stepSize;
-					//maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
+					maskedOut = localStepSize > stepSize;
+					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
 
 					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
-					//if(!maskedOut) {
-						//iPos = ivec2(round((currentPos.xz / localStepSize)));
-						//rng = rand_init(seedPos.x, seedPos.y);
-						// maskedOut = rand_next(rng) < blend;
-						//maskedOut = maskedOut && ((iPos.x | iPos.y) & 1) != 0;
-					//}
+					if(!maskedOut) {
+						iPos = ivec2(round((currentPos.xz / localStepSize)));
+						bool uneven = ((iPos.x | iPos.y) & 1) != 0;
+						
+						rng = rand_init(seedPos.x, seedPos.y);
+						rand = rand_next(rng);
+
+						if (uneven) {
+							alpha = (rand - blend) / rand; // Calculate an alpha value representing how close a cell is to being masked out
+						}
+						maskedOut = rand < blend;
+						maskedOut = maskedOut && uneven;
+					}
 					
 				} else {
 					outOfFrustum = true;
@@ -377,7 +385,7 @@ void main()
 				//drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 			}
 			// if (stepSize > grassConsts.Step) drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
-			drawWorldPos(currentPos, vec4(1.0, 1.0, 1.0, 1.0));
+			drawWorldPos(currentPos, vec4(alpha, alpha, alpha, 1.0));
 			// drawGrassBlade(rng, currentPos, localStepSize);
 
 
