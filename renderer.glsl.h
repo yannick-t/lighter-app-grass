@@ -38,6 +38,8 @@ struct CSGrassConstants
 	int TileDivisor;
 	vec3 PerpFtBDir;
 	float Step;
+	float MinHeight;
+	float MaxHeight;
 	// Distance at ehich the regular grid has the siye step
 	float StepDist;
 	int DrawDebugInfo; // levels of debug info

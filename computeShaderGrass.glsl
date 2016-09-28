@@ -9,29 +9,39 @@ const float Epsilon = 0.001;
 
 shared vec3 lastPosition;
 
-void drawGrassBlade(RandState rng, vec3 pos, float cellSize);
+void drawGrassBlade(RandState rng, vec3 pos);
+void drawGrassBladePixel(int x, int y, float aaAlpha);
+
 float getStepSize(float dist, out float blend);
 float distPointRay(vec3 origin, vec3 direction, vec3 point);
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir);
 vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize);
 vec3 floorGridPointByDirOffset(vec3 point, vec3 dir, float stepSize, vec2 gridOffset);
+
 bool[6] negate(bool array[6]);
+
 float intersectPlane(Ray ray, vec3 point, vec3 normal);
 vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
+
 vec3 getPointOnFrustumPlane(int index, vec3 frustumPoints[8]);
 bool gridCellOutsideFrustum(vec3 pos, float size, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
 bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]);
 bool pointsOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 points[4]);
 bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point, float epsilon);
-void drawWorldLine(vec3 start, vec3 end, vec4 colour);
-void drawImageLine(vec2 imageStart, vec2 imageEnd, vec4 colour);
-void drawWorldPos(vec3 pos, vec4 colour);
-void drawNDC(vec3 ndc, vec4 colour);
+
+void drawWorldLine(vec3 start, vec3 end, vec4 color);
+void drawImageLine(vec2 imageStart, vec2 imageEnd, vec4 color);
+void drawWorldPos(vec3 pos, vec4 color);
+void drawNDC(vec3 ndc, vec4 color);
+
 vec2 worldPosToImagePos(vec3 pos);
 vec2 ndcToImagePos(vec3 ndc);
 vec3 worldPosToNDC(vec3 pos);
-
 vec4 normalPointPlaneToNormalDistPlane(vec3 normal, vec3 point);
+
+void plotQuadBezier(int x0, int y0, int x1, int y1, int x2, int y2);
+void plotQuadBezierSegAA(int x0, int y0, int x1, int y1, int x2, int y2);
+void plotLineAA(int x0, int y0, int x1, int y1);
 
 layout(std140, binding = 1) uniform Camera
 {
@@ -50,8 +60,25 @@ layout(std140, binding = 2) uniform Grass
 layout(local_size_x = 32) in;
 layout(rgba32f, binding = 0) uniform image2D result;
 
+// prpertiies of grass blades needed in per pixel shading stage
+vec3 grassBladePos;
+vec3 grassBladeNormal;
+vec4 grassBladeBasecolor;
+
 void main()
 {
+	//if(gl_GlobalInvocationID.x == 0) {
+		vec3 quad[4] = {vec3(0), vec3(0) + vec3(0.0, 0.0, grassConsts.Step), vec3(0) + vec3(grassConsts.Step, 0.0, grassConsts.Step),
+					vec3(0) + vec3(grassConsts.Step, 0.0, 0.0)};
+		for(int l = 0; l < 4; l++) {
+			drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0, 1.0, 1.0, 1.0));
+		}
+		RandState rng = rand_init(0, 0);
+		drawGrassBlade(rng, vec3(0));
+	//}
+	return;
+
+
 	vec2 tileCount = ivec2(imageSize(result) / grassConsts.TileDivisor);
 
 	if(grassConsts.DrawDebugInfo >= 2) {
@@ -122,11 +149,7 @@ void main()
 	}
 
 
-	if(gl_GlobalInvocationID.x == 0) {
-		RandState rng = rand_init(0, 0);
-		//drawGrassBlade(rng, vec3(0), 1);
-	}
-
+	
 	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 0 /*|| gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 4*/) {
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
@@ -289,7 +312,7 @@ void main()
 					newGroup = false;
 				}
 				// drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
-				//drawWorldPos(start, vec4(0.0,0.0,1.0,1.0));
+				// drawWorldPos(start, vec4(0.0,0.0,1.0,1.0));
 				// drawWorldPos(lineStart, vec4(stepSize <= grassConsts.Step ? 1.0 : 0.0, 1.0, 0.0, 1.0));
 
 				// Check if position is in frustum and share with other threads
@@ -319,6 +342,7 @@ void main()
 					maskedOut = localStepSize > stepSize;
 					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
 
+					
 					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
 					if(!maskedOut) {
 						iPos = ivec2(round((currentPos.xz / localStepSize)));
@@ -379,27 +403,22 @@ void main()
 			}
 
 			// found position -> draw
+			
 			vec3 quad[4] = {currentPos, currentPos + vec3(0.0, 0.0, localStepSize), currentPos + vec3(localStepSize, 0.0, localStepSize),
 					currentPos + vec3(localStepSize, 0.0, 0.0)};
 			for(int l = 0; l < 4; l++) {
-				//drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
+				// drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
+				// drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0, 1.0, 1.0, 1.0));
 			}
-			// if (stepSize > grassConsts.Step) drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
-			drawWorldPos(currentPos, vec4(alpha, alpha, alpha, 1.0));
+			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
+			// drawWorldPos(currentPos + vec3(rand_next(rng) * localStepSize, 0.0, rand_next(rng) * localStepSize) , vec4(1.0, 1.0, 1.0, 1.0));
+			// drawWorldPos(currentPos, vec4(0.9, 0.9, 0.8, 1.0));
 			// drawGrassBlade(rng, currentPos, localStepSize);
 
 
 			// get position of last thread to find the next cells to draw at
 			memoryBarrierShared();
 			lineOneStart = lastPosition;
-			if(stepSize > grassConsts.Step) {  
-				debugTest += 1;
-				//drawWorldPos(lineOneStart, vec4(1.0, 1.0 , 0.0, 1.0)); 
-
-				if(debugTest > 1) {
-					//break;
-				}
-			}
 			newLine = false;
 			newGroup = true;
 		}
@@ -407,11 +426,9 @@ void main()
 }
 
 
-void drawGrassBlade(RandState rng, vec3 pos, float cellSize) {
-	int curveSubdivision = 10;
-
-	float minHeight = 0.2;
-	float maxHeight = 2.0;
+void drawGrassBlade(RandState rng, vec3 pos) {
+	float minHeight = grassConsts.MinHeight;
+	float maxHeight = grassConsts.MaxHeight;
 	float maxHorizontalControlPointDerivation = 0.7;
 	float maxHorizontalTipDerivation = 0.7;
 
@@ -420,13 +437,13 @@ void drawGrassBlade(RandState rng, vec3 pos, float cellSize) {
 	float tipHeight = minHeight + rand_next(rng) * (maxHeight - minHeight);
 	
 
-	vec3 root = pos + vec3((rand_next(rng) * cellSize), 0, (rand_next(rng) * cellSize));
-	vec3 controlPoint = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation),
+	vec3 root = pos + vec3((rand_next(rng) * grassConsts.Step), 0, (rand_next(rng) * grassConsts.Step));
+	vec3 controlPoint = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step),
 		cPHeight,
-		(rand_next(rng) * maxHorizontalControlPointDerivation));
-	vec3 tip = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation),
+		(rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step));
+	vec3 tip = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step),
 		tipHeight,
-		(rand_next(rng) * maxHorizontalControlPointDerivation));
+		(rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step));
 
 
 	vec2 rootProj = worldPosToImagePos(root);
@@ -436,20 +453,98 @@ void drawGrassBlade(RandState rng, vec3 pos, float cellSize) {
 	if(rootProj.x < 0) {
 		return;
 	}
-	// subdivide curve and draw line segments
-	vec2 p0 = rootProj;
-	vec2 p1;
 	
+	
+	imageStore(result, ivec2(rootProj), vec4(1.0,1.0,1.0,1.0));
+	drawImageLine(rootProj, cPProj, vec4(0.5,0.5,0.5,1.0));
+	imageStore(result, ivec2(cPProj), vec4(1.0,1.0,1.0,1.0));
+	drawImageLine(cPProj, tipProj, vec4(0.5,0.5,0.5,1.0));
+	imageStore(result, ivec2(tipProj), vec4(1.0,1.0,1.0,1.0));
+	
+	grassBladePos = root;
+	// Generate random color
+	grassBladeBasecolor = vec4(rand_next(rng) * 0.3, rand_next(rng) * 1.0, rand_next(rng) * 0.4, 1.0);
+	// Generate normal pointing towards the controlPoint
+	grassBladeNormal = normalize(controlPoint - (root + tip) / 2);
+
+	// 3 different ways of drawing grass blade
+	//plotQuadBezier(int(rootProj.x), int(rootProj.y), int(cPProj.x), int(cPProj.y), int(tipProj.x), int(tipProj.y));
+	
+	/*
+	// subdivide curve and draw as lines
+	ivec2 p0 = ivec2(rootProj);
+	ivec2 p1;
+	int curveSubdivision = 10;
 	for(int i = 1; i < curveSubdivision; i++) {
 		float u = float(i) / curveSubdivision;
-		p1 = pow(1 - u, 2) * rootProj + 2 * (1 - u) * u * cPProj + pow(u, 2) * tipProj;
+		p1 = ivec2(pow(1 - u, 2) * rootProj + 2 * (1 - u) * u * cPProj + pow(u, 2) * tipProj);
 
-		drawImageLine(p0, p1, vec4(0.1, 1.0, 0.2, 1.0));
+		plotLineAA(p0.x, p0.y, p1.x, p1.y);
 		p0 = p1;
 	}
-	drawImageLine(p1, tipProj, vec4(0.1, 1.0, 0.2, 1.0));
+	plotLineAA(p0.x, p0.y, int(tipProj.x), int(tipProj.y));*/
+
+	// scanline rasterization
+	float start = max(cPProj.y, tipProj.y); // Todo: maybe better start
+	float end = rootProj.y;
+	float itStep = -1;
+	if(start < end) {
+		itStep = 1;
+	}
+	for(float y = start; itStep > 0 ? y <= end : y >= end; y += itStep) {
+		// intersect scanline with curve
+		float a = (rootProj.y - 2 * cPProj.y + tipProj.y);
+		float det = y * a + pow(cPProj.y, 2) - rootProj.y * tipProj.y;
+		if(det >= 0) {
+			float t1 = (rootProj.y - cPProj.y - sqrt(det)) / a;
+			float t2 = (rootProj.y - cPProj.y + sqrt(det)) / a;
+
+			if(t1 >= 0 && t1 <= 1) {
+				float x = pow(1 - t1, 2) * rootProj.x + 2 * (1 - t1) * t1 * cPProj.x + pow(t1, 2) * tipProj.x;
+				drawGrassBladePixel(int(x), int(y), 1.0);
+			}
+
+			if(t2 >= 0 && t2 <= 1) {
+				float x = pow(1 - t2, 2) * rootProj.x + 2 * (1 - t2) * t2 * cPProj.x + pow(t2, 2) * tipProj.x;
+				drawGrassBladePixel(int(x), int(y), 1.0);
+			}
+		}
+	}
 }
 
+// function to be called by Bresenham's algorithm
+// draws grass blade pixels and applies shading
+void drawGrassBladePixel(int x, int y, float aaAlpha) {
+	vec4 color = grassBladeBasecolor;
+
+	// fake AO (darker the closer to the ground, curve starts at the bottom) Todo
+	float aoFactor = 1.0;
+
+	// Shading
+	// double sided
+	if(dot(grassBladeNormal, camera.CamDir) > 0) {
+		grassBladeNormal = -grassBladeNormal;
+	}
+
+	float lambertian = -dot(grassBladeNormal, light.Direction);
+	if(lambertian >= 0) {
+		color = lambertian * mix(grassBladeBasecolor, light.Color, 0.2);
+	} else {
+		// back lighting - less bright
+		color = ((1 - lambertian) / 2) * mix(grassBladeBasecolor, light.Color, 0.2);
+	}
+	
+	color = aaAlpha * aoFactor * color;
+
+	imageStore(result, ivec2(x,y), color);
+}
+
+
+// Utility methods to handle points on the regular grid used to go through the grass blades
+
+float distPointRay(vec3 origin, vec3 direction, vec3 point) {
+	return length(cross(normalize(direction), point - origin));
+}
 
 // Get step size for regular grid by distance to the camera
 float getStepSize(float dist, out float blend) {
@@ -463,10 +558,6 @@ float getStepSize(float dist, out float blend) {
 		factor = pow(2, factor);
 	}
 	return factor * grassConsts.Step;
-}
-
-float distPointRay(vec3 origin, vec3 direction, vec3 point) {
-	return length(cross(normalize(direction), point - origin));
 }
 
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir) {
@@ -520,6 +611,8 @@ bool[6] negate(bool array[6]) {
 	return r;
 }
 
+
+// methods for intersection
 float intersectPlane(Ray ray, vec3 point, vec3 normal) {
 	float denom = dot(normal, ray.Dir);
 	float t = 0;
@@ -582,6 +675,8 @@ vec3 getPointOnFrustumPlane(int index, vec3 frustumPoints[8]) {
 	return point;
 }
 
+
+// outside frustum tests
 bool gridCellOutsideFrustum(vec3 pos, float size, bool whichPlanes[6], vec3 frustumPlaneNormals[6], vec3 frustumPoints[8]) {
 	vec3 quad[4] = {pos, pos + vec3(0.0, 0.0, size),
 					pos + vec3(size, 0.0, 0.0), pos + vec3(size, 0.0, size)};
@@ -617,29 +712,33 @@ bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point, float ep
 	return dot(planeNormal, point - (planePoint + epsilon * planeNormal)) >= 0;
 }
 
-void drawWorldPos(vec3 pos, vec4 colour) {
+
+// methods to draw single pixels
+void drawWorldPos(vec3 pos, vec4 color) {
 	vec3 ndc = worldPosToNDC(pos);
-	drawNDC(ndc, colour);
+	drawNDC(ndc, color);
 }
 
-void drawNDC(vec3 ndc, vec4 colour) {
+void drawNDC(vec3 ndc, vec4 color) {
 	ivec2 imagePos = ivec2(ndcToImagePos(ndc));
 	if (-1.0 <= ndc.x && ndc.x <= 1.0 &&
 		-1.0 <= ndc.y && ndc.y <= 1.0 &&
 		ndc.z >= 0.0 && ndc.z <= 1.0) {
 
-		imageStore(result, imagePos, colour);
-		// imageStore(result, imagePos + ivec2(0, 1), colour);
-		// imageStore(result, imagePos + ivec2(1, 0), colour);
-		// imageStore(result, imagePos + ivec2(1, 1), colour);
+		imageStore(result, imagePos, color);
+		// imageStore(result, imagePos + ivec2(0, 1), color);
+		// imageStore(result, imagePos + ivec2(1, 0), color);
+		// imageStore(result, imagePos + ivec2(1, 1), color);
 	}
 }
 
-void drawWorldLine(vec3 start, vec3 end, vec4 colour) {
-	drawImageLine(worldPosToImagePos(start), worldPosToImagePos(end), colour);
+
+// Simple non-antialiased line drawing
+void drawWorldLine(vec3 start, vec3 end, vec4 color) {
+	drawImageLine(worldPosToImagePos(start), worldPosToImagePos(end), color);
 }
 
-void drawImageLine(vec2 imageStart, vec2 imageEnd, vec4 colour) {
+void drawImageLine(vec2 imageStart, vec2 imageEnd, vec4 color) {
 	// Digital Differential Algorithm	
 	float dx = imageEnd.x - imageStart.x;
 	float dy = imageEnd.y - imageStart.y;
@@ -653,17 +752,21 @@ void drawImageLine(vec2 imageStart, vec2 imageEnd, vec4 colour) {
 	vec2 pos = vec2(imageStart);
 	for(float v = 0; v < steps; v++) {
 		pos += increment;
-		imageStore(result, ivec2(pos), colour);
+		imageStore(result, ivec2(pos), color);
 	}
 }
 
+
+// coordinate convertion methods
 vec2 worldPosToImagePos(vec3 pos) {
 	vec3 ndc = worldPosToNDC(pos);
+	/*
 	if(ndc.z < 0 || ndc.z > 1) {
 		return vec2(-1);
 	} else {
 		return ndcToImagePos(ndc);
-	}
+	}*/
+	return ndcToImagePos(ndc);
 }
 
 vec2 ndcToImagePos(vec3 ndc) {
@@ -679,5 +782,109 @@ vec3 worldPosToNDC(vec3 pos) {
 
 vec4 normalPointPlaneToNormalDistPlane(vec3 normal, vec3 point) {
 	return vec4(normal, dot(normal, -point));
+}
+
+
+
+// Bresenham's algortihm to plot Bezier curves from http://members.chello.at/~easyfilter/bresenham.html
+// Modified for glsl and this application
+
+// Divide curve into segments without gradient change
+void plotQuadBezier(int x0, int y0, int x1, int y1, int x2, int y2) 
+{
+  /* plot any quadratic Bezier curve */
+
+  int x = x0-x1, y = y0-y1;
+  float t = x0-2*x1+x2, r;
+  if (x*(x2-x1) > 0) {		  					 /* horizontal cut at P4? */
+    if (y*(y2-y1) > 0)						   /* vertical cut at P6 too? */
+      if (abs((y0-2*y1+y2)/t*x) > abs(y)) {			      /* which first? */
+        x0 = x2; x2 = x+x1; y0 = y2; y2 = y+y1;			   /* swap points */
+      }							  /* now horizontal cut at P4 comes first */
+    t = (x0-x1)/t;
+    r = (1-t)*((1-t)*y0+2.0*t*y1)+t*t*y2;					  /* By(t=P4) */
+    t = (x0*x2-x1*x1)*t/(x0-x1);					 /* gradient dP4/dx=0 */
+    x = int(floor(t+0.5)); y = int(floor(r+0.5));
+    r = (y1-y0)*(t-x0)/(x1-x0)+y0;				  /* intersect P3 | P0 P1 */
+    plotQuadBezierSegAA(x0,y0, x,int(floor(r+0.5)), x,y);
+    r = (y1-y2)*(t-x2)/(x1-x2)+y2;				  /* intersect P4 | P1 P2 */
+    x0 = x1 = x; y0 = y; y1 = int(floor(r+0.5));	  /* P0 = P4, P1 = P8 */
+  }
+  if ((y0-y1)*(y2-y1) > 0) {				   /* vertical cut at P6? */
+    t = y0-2*y1+y2; t = (y0-y1)/t;
+    r = (1-t)*((1-t)*x0+2.0*t*x1)+t*t*x2;					  /* Bx(t=P6) */
+    t = (y0*y2-y1*y1)*t/(y0-y1);					 /* gradient dP6/dy=0 */
+    x = int(floor(r+0.5)); y = int(floor(t+0.5));
+    r = (x1-x0)*(t-y0)/(y1-y0)+x0;				  /* intersect P6 | P0 P1 */
+    plotQuadBezierSegAA(x0,y0, int(floor(r+0.5)),y, x,y);
+    r = (x1-x2)*(t-y2)/(y1-y2)+x2;				  /* intersect P7 | P1 P2 */
+    x0 = x; x1 = int(floor(r+0.5)); y0 = y1 = y;	  /* P0 = P6, P1 = P7 */
+  }
+  plotQuadBezierSegAA(x0,y0, x1,y1, x2,y2);				/* remaining part */
+}
+
+void plotQuadBezierSegAA(int x0, int y0, int x1, int y1, int x2, int y2) 
+{   
+   int sx = x2-x1, sy = y2-y1;
+   int xx = x0-x1, yy = y0-y1, xy;         /* relative values for checks */
+   float dx, dy, err, ed, cur = xx*sy-yy*sx;                /* curvature */
+
+   // assertion : xx*sx >= 0 && yy*sy >= 0 - sign of gradient must not change
+
+   if (sx*sx+sy*sy > xx*xx+yy*yy) { /* begin with longer part */ 
+      x2 = x0; x0 = sx+x1; y2 = y0; y0 = sy+y1; cur = -cur; /* swap P0 P2 */
+   }  
+   if (cur != 0)
+   {                                                  /* no straight line */
+      xx += sx; xx *= sx = x0 < x2 ? 1 : -1;          /* x step direction */
+      yy += sy; yy *= sy = y0 < y2 ? 1 : -1;          /* y step direction */
+      xy = 2*xx*yy; xx *= xx; yy *= yy;         /* differences 2nd degree */
+      if (cur*sx*sy < 0) {                          /* negated curvature? */
+         xx = -xx; yy = -yy; xy = -xy; cur = -cur;
+      }
+      dx = 4.0*sy*(x1-x0)*cur+xx-xy;            /* differences 1st degree */
+      dy = 4.0*sx*(y0-y1)*cur+yy-xy;
+      xx += xx; yy += yy; err = dx+dy+xy;               /* error 1st step */
+      do {                              
+         cur = min(dx+xy,-xy-dy);
+         ed = max(dx+xy,-xy-dy);           /* approximate error distance */
+         ed = 255/(ed+2*ed*cur*cur/(4.*ed*ed+cur*cur)); 
+         drawGrassBladePixel(x0,y0, ed*abs(err-dx-dy-xy)/255);  /* plot curve */
+         if (x0 == x2 && y0 == y2) return;/* last pixel -> curve finished */
+         x1 = x0; cur = dx-err; y1 = 2*err+dy < 0 ? 1 : 0;
+         if (2*err+dx > 0) {                                    /* x step */
+            if (err-dy < ed) drawGrassBladePixel(x0,y0+sy, ed*abs(err-dy)/255);
+            x0 += sx; dx -= xy; err += dy += yy;
+         }
+         if (y1 == 1) {                                         /* y step */
+            if (cur < ed) drawGrassBladePixel(x1+sx,y0, ed*abs(cur)/255);
+            y0 += sy; dy -= xy; err += dx += xx; 
+         }
+      } while (dy < dx);              /* gradient negates -> close curves */
+   }
+   plotLineAA(x0,y0, x2,y2);              /* plot remaining needle to end */
+}
+
+void plotLineAA(int x0, int y0, int x1, int y1)
+{
+   int dx = abs(x1-x0), sx = x0<x1 ? 1 : -1;
+   int dy = abs(y1-y0), sy = y0<y1 ? 1 : -1; 
+   int err = dx-dy, e2, x2;                       /* error value e_xy */
+   float ed = dx+dy == 0 ? 1 : sqrt(float(dx*dx)+float(dy*dy));
+
+   for ( ; ; ){                                         /* pixel loop */
+      drawGrassBladePixel(x0,y0, abs(err-dx+dy)/ed);
+      e2 = err; x2 = x0;
+      if (2*e2 >= -dx) {                                    /* x step */
+         if (x0 == x1) break;
+         if (e2+dy < ed) drawGrassBladePixel(x0,y0+sy, (e2+dy)/ed);
+         err -= dy; x0 += sx; 
+      } 
+      if (2*e2 <= dy) {                                     /* y step */
+         if (y0 == y1) break;
+         if (dx-e2 < ed) drawGrassBladePixel(x2+sx,y0, (dx-e2)/ed);
+         err += dx; y0 += sy; 
+    }
+  }
 }
 #endif
