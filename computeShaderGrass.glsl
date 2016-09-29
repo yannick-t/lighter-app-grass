@@ -491,22 +491,30 @@ void drawGrassBlade(RandState rng, vec3 pos) {
 	if(start < end) {
 		itStep = 1;
 	}
-	for(float y = start; itStep > 0 ? y <= end : y >= end; y += itStep) {
+	for (float y = start; itStep > 0 ? y <= end : y >= end; y += itStep) {
 		// intersect scanline with curve
-		float a = (rootProj.y - 2 * cPProj.y + tipProj.y);
-		float det = y * a + pow(cPProj.y, 2) - rootProj.y * tipProj.y;
-		if(det >= 0) {
-			float t1 = (rootProj.y - cPProj.y - sqrt(det)) / a;
-			float t2 = (rootProj.y - cPProj.y + sqrt(det)) / a;
-
-			if(t1 >= 0 && t1 <= 1) {
-				float x = pow(1 - t1, 2) * rootProj.x + 2 * (1 - t1) * t1 * cPProj.x + pow(t1, 2) * tipProj.x;
+		if (cPProj.y == (rootProj.y + tipProj.y) / 2 && rootProj.y - tipProj.y != 0) {
+			float t = (rootProj.y - y) / (rootProj.y - tipProj.y);
+			if (t >= 0 && t <= 1) {
+				float x = pow(1 - t, 2) * rootProj.x + 2 * (1 - t) * t * cPProj.x + pow(t, 2) * tipProj.x;
 				drawGrassBladePixel(int(x), int(y), 1.0);
 			}
+		} else {
+			float a = (2 * cPProj.y - rootProj.y - tipProj.y);
+			float det = pow(cPProj.y, 2) - 2 * cPProj.y * y - rootProj.y * tipProj.y + rootProj.y * y + tipProj.y * y;
+			if (det >= 0 && a != 0) {
+				float t1 = (sqrt(det) + cPProj.y - rootProj.y) / a;
+				float t2 = -t1;
 
-			if(t2 >= 0 && t2 <= 1) {
-				float x = pow(1 - t2, 2) * rootProj.x + 2 * (1 - t2) * t2 * cPProj.x + pow(t2, 2) * tipProj.x;
-				drawGrassBladePixel(int(x), int(y), 1.0);
+				if (t1 >= 0 && t1 <= 1) {
+					float x = pow(1 - t1, 2) * rootProj.x + 2 * (1 - t1) * t1 * cPProj.x + pow(t1, 2) * tipProj.x;
+					drawGrassBladePixel(int(x), int(y), 1.0);
+				}
+
+				if (t2 >= 0 && t2 <= 1) {
+					float x = pow(1 - t2, 2) * rootProj.x + 2 * (1 - t2) * t2 * cPProj.x + pow(t2, 2) * tipProj.x;
+					drawGrassBladePixel(int(x), int(y), 1.0);
+				}
 			}
 		}
 	}
