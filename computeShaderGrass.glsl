@@ -5,12 +5,18 @@
 #include <renderer.glsl.h>
 #include <random.glsl.h>
 
+#define PI 3.1415926535897932384626433832795
+
 const float Epsilon = 0.001;
+const float shininess = 16.0; // Todo: maybe randomize
 
 shared vec3 lastPosition;
 
-void drawGrassBlade(RandState rng, vec3 pos);
-void drawGrassBladePixel(int x, int y, float aaAlpha);
+void drawGrassBlade(RandState rng, vec3 pos, float stepSize);
+void drawGrassBladePixel(int x, int y, vec3 pos, vec3 normal, float aaAlpha);
+
+void scanlineRasterizeGrassBlade(vec2 rootProj, vec2 cPProj, vec2 tipProj);
+void drawGrassBladePixelScanlineAA(float y, float t);
 
 float getStepSize(float dist, out float blend);
 float distPointRay(vec3 origin, vec3 direction, vec3 point);
@@ -39,6 +45,8 @@ vec2 ndcToImagePos(vec3 ndc);
 vec3 worldPosToNDC(vec3 pos);
 vec4 normalPointPlaneToNormalDistPlane(vec3 normal, vec3 point);
 
+mat4 rotationMatrix(vec3 axis, float angle);
+
 void plotQuadBezier(int x0, int y0, int x1, int y1, int x2, int y2);
 void plotQuadBezierSegAA(int x0, int y0, int x1, int y1, int x2, int y2);
 void plotLineAA(int x0, int y0, int x1, int y1);
@@ -55,28 +63,38 @@ layout(std140, binding = 2) uniform Grass
 {
 	CSGrassConstants grassConsts;
 };
+layout(binding = 4) uniform atomic_uint bladeCount;
 
 #ifdef IN_CS
 layout(local_size_x = 32) in;
 layout(rgba32f, binding = 0) uniform image2D result;
 
-// prpertiies of grass blades needed in per pixel shading stage
-vec3 grassBladePos;
+// prpertiies of grass blades
 vec3 grassBladeNormal;
 vec4 grassBladeBasecolor;
 
+vec3 root;
+vec3 cP;
+vec3 tip;
+
+vec2 rootProj;
+vec2 cPProj;
+vec2 tipProj;
+
+mat4 normalPerpRotation;
+
 void main()
 {
-	//if(gl_GlobalInvocationID.x == 0) {
-		vec3 quad[4] = {vec3(0), vec3(0) + vec3(0.0, 0.0, grassConsts.Step), vec3(0) + vec3(grassConsts.Step, 0.0, grassConsts.Step),
-					vec3(0) + vec3(grassConsts.Step, 0.0, 0.0)};
-		for(int l = 0; l < 4; l++) {
-			drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0, 1.0, 1.0, 1.0));
-		}
-		RandState rng = rand_init(0, 0);
-		drawGrassBlade(rng, vec3(0));
-	//}
-	return;
+
+	if(gl_GlobalInvocationID.x == 0) {
+		//vec3 quad[4] = {vec3(0), vec3(0) + vec3(0.0, 0.0, grassConsts.Step), vec3(0) + vec3(grassConsts.Step, 0.0, grassConsts.Step),
+		//			vec3(0) + vec3(grassConsts.Step, 0.0, 0.0)};
+		//for(int l = 0; l < 4; l++) {
+			//drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0, 1.0, 1.0, 1.0));
+		//}
+		//RandState rng = rand_init(0, 0);
+		//drawGrassBlade(rng, vec3(0));
+	}
 
 
 	vec2 tileCount = ivec2(imageSize(result) / grassConsts.TileDivisor);
@@ -404,8 +422,8 @@ void main()
 
 			// found position -> draw
 			
-			vec3 quad[4] = {currentPos, currentPos + vec3(0.0, 0.0, localStepSize), currentPos + vec3(localStepSize, 0.0, localStepSize),
-					currentPos + vec3(localStepSize, 0.0, 0.0)};
+			//vec3 quad[4] = {currentPos, currentPos + vec3(0.0, 0.0, localStepSize), currentPos + vec3(localStepSize, 0.0, localStepSize),
+			//		currentPos + vec3(localStepSize, 0.0, 0.0)};
 			for(int l = 0; l < 4; l++) {
 				// drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 				// drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0, 1.0, 1.0, 1.0));
@@ -413,7 +431,7 @@ void main()
 			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 			// drawWorldPos(currentPos + vec3(rand_next(rng) * localStepSize, 0.0, rand_next(rng) * localStepSize) , vec4(1.0, 1.0, 1.0, 1.0));
 			// drawWorldPos(currentPos, vec4(0.9, 0.9, 0.8, 1.0));
-			// drawGrassBlade(rng, currentPos, localStepSize);
+			drawGrassBlade(rng, currentPos, localStepSize);
 
 
 			// get position of last thread to find the next cells to draw at
@@ -426,7 +444,23 @@ void main()
 }
 
 
-void drawGrassBlade(RandState rng, vec3 pos) {
+void drawGrassBlade(RandState rng, vec3 pos, float stepSize) {
+	atomicCounterIncrement(bladeCount);
+	
+	// Calculate a random stable normal sized cell if the cell is bigger than the normal one
+	// do this by finding a random one of the smaller cells with half the step size until the stepSize is the initial one
+	float halfStep;
+	while(grassConsts.Step < stepSize) {
+		halfStep = stepSize / 2;
+		pos = pos + vec3(floor(rand_next(rng) * halfStep / grassConsts.Step) * halfStep, 0.0, floor(rand_next(rng) * halfStep / grassConsts.Step) * halfStep);
+		ivec2 seedPos = ivec2(round(pos.xz / grassConsts.Step));
+		rng = rand_init(seedPos.x, seedPos.y);
+		// pull one random number like it is done usually to calculate the blend for stability
+		rand_next(rng);
+
+		stepSize = halfStep;
+	}
+
 	float minHeight = grassConsts.MinHeight;
 	float maxHeight = grassConsts.MaxHeight;
 	float maxHorizontalControlPointDerivation = 0.7;
@@ -434,119 +468,127 @@ void drawGrassBlade(RandState rng, vec3 pos) {
 
 	// Random generation of grass blade properties
 	float cPHeight = minHeight + rand_next(rng) * (maxHeight - minHeight);
-	float tipHeight = minHeight + rand_next(rng) * (maxHeight - minHeight);
+	float tipHeight = cPHeight + rand_next(rng) * (maxHeight - cPHeight);
 	
 
-	vec3 root = pos + vec3((rand_next(rng) * grassConsts.Step), 0, (rand_next(rng) * grassConsts.Step));
-	vec3 controlPoint = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step),
+	root = pos + vec3((rand_next(rng) * grassConsts.Step), 0, (rand_next(rng) * grassConsts.Step));
+	cP = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step),
 		cPHeight,
 		(rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step));
-	vec3 tip = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step),
+	tip = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step),
 		tipHeight,
 		(rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step));
 
 
-	vec2 rootProj = worldPosToImagePos(root);
-	vec2 cPProj = worldPosToImagePos(controlPoint);
-	vec2 tipProj = worldPosToImagePos(tip);
+	rootProj = worldPosToImagePos(root);
+	cPProj = worldPosToImagePos(cP);
+	tipProj = worldPosToImagePos(tip);
 
 	if(rootProj.x < 0) {
 		return;
 	}
 	
-	
-	imageStore(result, ivec2(rootProj), vec4(1.0,1.0,1.0,1.0));
-	drawImageLine(rootProj, cPProj, vec4(0.5,0.5,0.5,1.0));
-	imageStore(result, ivec2(cPProj), vec4(1.0,1.0,1.0,1.0));
-	drawImageLine(cPProj, tipProj, vec4(0.5,0.5,0.5,1.0));
-	imageStore(result, ivec2(tipProj), vec4(1.0,1.0,1.0,1.0));
-	
-	grassBladePos = root;
-	// Generate random color
-	grassBladeBasecolor = vec4(rand_next(rng) * 0.3, rand_next(rng) * 1.0, rand_next(rng) * 0.4, 1.0);
-	// Generate normal pointing towards the controlPoint
-	grassBladeNormal = normalize(controlPoint - (root + tip) / 2);
-
-	// 3 different ways of drawing grass blade
-	//plotQuadBezier(int(rootProj.x), int(rootProj.y), int(cPProj.x), int(cPProj.y), int(tipProj.x), int(tipProj.y));
-	
-	/*
-	// subdivide curve and draw as lines
-	ivec2 p0 = ivec2(rootProj);
-	ivec2 p1;
-	int curveSubdivision = 10;
-	for(int i = 1; i < curveSubdivision; i++) {
-		float u = float(i) / curveSubdivision;
-		p1 = ivec2(pow(1 - u, 2) * rootProj + 2 * (1 - u) * u * cPProj + pow(u, 2) * tipProj);
-
-		plotLineAA(p0.x, p0.y, p1.x, p1.y);
-		p0 = p1;
+	if(rootProj.x < 0 || cPProj.x < 0 || tipProj.x < 0) {
+		return;
 	}
-	plotLineAA(p0.x, p0.y, int(tipProj.x), int(tipProj.y));*/
+	
+	//imageStore(result, ivec2(rootProj), vec4(1.0,1.0,1.0,1.0));
+	//drawImageLine(rootProj, cPProj, vec4(0.5,0.5,0.5,1.0));
+	//imageStore(result, ivec2(cPProj), vec4(1.0,1.0,1.0,1.0));
+	//drawImageLine(cPProj, tipProj, vec4(0.5,0.5,0.5,1.0));
+	//imageStore(result, ivec2(tipProj), vec4(1.0,1.0,1.0,1.0));
+	
+	// Generate random color
+	grassBladeBasecolor = vec4(rand_next(rng) * 0.2, rand_next(rng) * 1.0, rand_next(rng) * 0.1, 1.0);
+	// Generate normal pointing towards the controlPoint
+	grassBladeNormal = normalize(cP - (root + tip) / 2);
+
+	normalPerpRotation = rotationMatrix(cross(root - cP, tip - cP), 3 / 2 * PI);
 
 	// scanline rasterization
-	float start = max(cPProj.y, tipProj.y); // Todo: maybe better start
-	float end = rootProj.y;
-	float itStep = -1;
-	if(start < end) {
-		itStep = 1;
+	scanlineRasterizeGrassBlade(rootProj, cPProj, tipProj);
+}
+
+void scanlineRasterizeGrassBlade(vec2 rootProj, vec2 cPProj, vec2 tipProj) {
+	float start = min(min(tipProj.y, cPProj.y), rootProj.y); // Todo: maybe better start
+	float end = max(max(tipProj.y, cPProj.y), rootProj.y);
+	float itStep = 1;
+	if(start > end) {
+		itStep = -1;
 	}
+
 	for (float y = start; itStep > 0 ? y <= end : y >= end; y += itStep) {
 		// intersect scanline with curve
 		if (cPProj.y == (rootProj.y + tipProj.y) / 2 && rootProj.y - tipProj.y != 0) {
 			float t = (rootProj.y - y) / (rootProj.y - tipProj.y);
 			if (t >= 0 && t <= 1) {
-				float x = pow(1 - t, 2) * rootProj.x + 2 * (1 - t) * t * cPProj.x + pow(t, 2) * tipProj.x;
-				drawGrassBladePixel(int(x), int(y), 1.0);
+				drawGrassBladePixelScanlineAA(y, t);
 			}
 		} else {
 			float a = (2 * cPProj.y - rootProj.y - tipProj.y);
 			float det = pow(cPProj.y, 2) - 2 * cPProj.y * y - rootProj.y * tipProj.y + rootProj.y * y + tipProj.y * y;
 			if (det >= 0 && a != 0) {
 				float t1 = (sqrt(det) + cPProj.y - rootProj.y) / a;
-				float t2 = -t1;
+				float t2 = (-sqrt(det) + cPProj.y - rootProj.y) / a;;
 
 				if (t1 >= 0 && t1 <= 1) {
-					float x = pow(1 - t1, 2) * rootProj.x + 2 * (1 - t1) * t1 * cPProj.x + pow(t1, 2) * tipProj.x;
-					drawGrassBladePixel(int(x), int(y), 1.0);
+					drawGrassBladePixelScanlineAA(y, t1);
 				}
 
 				if (t2 >= 0 && t2 <= 1) {
-					float x = pow(1 - t2, 2) * rootProj.x + 2 * (1 - t2) * t2 * cPProj.x + pow(t2, 2) * tipProj.x;
-					drawGrassBladePixel(int(x), int(y), 1.0);
+					drawGrassBladePixelScanlineAA(y, t2);
 				}
 			}
 		}
 	}
 }
 
-// function to be called by Bresenham's algorithm
+void drawGrassBladePixelScanlineAA(float y, float t) {
+	float x = pow(1 - t, 2) * rootProj.x + 2 * (1 - t) * t * cPProj.x + pow(t, 2) * tipProj.x;
+	vec3 pos = pow(1 - t, 2) * root + 2 * (1 - t) * t * cP + pow(t, 2) * tip;
+	vec3 tangent = 2 * (-2 * cP * t + cP + root * (t - 1) + t * tip);
+	vec3 normal = normalize((normalPerpRotation * vec4(tangent, 1.0)).xyz);
+
+	float b = modf(x, x);
+	int nextPixel = b < 0.5 ? -1 : 1;
+	b = abs((b - 0.5) * 2);
+	drawGrassBladePixel(int(x), int(y), pos, normal, 1);
+	drawGrassBladePixel(int(x) + nextPixel, int(y), pos, normal, b);
+}
+
+// function to be called by to draw a pixel of a grass blade
 // draws grass blade pixels and applies shading
-void drawGrassBladePixel(int x, int y, float aaAlpha) {
+void drawGrassBladePixel(int x, int y, vec3 pos, vec3 normal, float aaAlpha) {
 	vec4 color = grassBladeBasecolor;
 
-	// fake AO (darker the closer to the ground, curve starts at the bottom) Todo
-	float aoFactor = 1.0;
+	// fake AO (darker the closer to the ground, curve starts at the bottom)
+	float aoDist = grassConsts.MinHeight; // Todo
+	float aoFactor = clamp(distance(pos, vec3(pos.x, 0.0, pos.z)) / aoDist, 0.2, 1.0);
 
 	// Shading
 	// double sided
-	if(dot(grassBladeNormal, camera.CamDir) > 0) {
+	if(dot(normal, camera.CamDir) > 0) {
 		grassBladeNormal = -grassBladeNormal;
 	}
 
-	float lambertian = -dot(grassBladeNormal, light.Direction);
+	float lambertian = -dot(normal, light.Direction);
+	float specular = 0.0;
 	if(lambertian >= 0) {
-		color = lambertian * mix(grassBladeBasecolor, light.Color, 0.2);
+		vec3 halfDir = normalize(-light.Direction + camera.CamDir);
+		float specAngle = max(dot(halfDir, normal), 0.0);
+		specular = pow(specAngle, shininess);
+
+		color = lambertian * mix(grassBladeBasecolor, light.Color, 0.2) + specular * light.Color;
 	} else {
 		// back lighting - less bright
-		color = ((1 - lambertian) / 2) * mix(grassBladeBasecolor, light.Color, 0.2);
+		color = ((- lambertian) / 2) * mix(grassBladeBasecolor, light.Color, 0.3);
 	}
 	
-	color = aaAlpha * aoFactor * color;
+	color = aoFactor * color;
+	color.a = aaAlpha;
 
 	imageStore(result, ivec2(x,y), color);
 }
-
 
 // Utility methods to handle points on the regular grid used to go through the grass blades
 
@@ -768,12 +810,12 @@ void drawImageLine(vec2 imageStart, vec2 imageEnd, vec4 color) {
 // coordinate convertion methods
 vec2 worldPosToImagePos(vec3 pos) {
 	vec3 ndc = worldPosToNDC(pos);
-	/*
+	
 	if(ndc.z < 0 || ndc.z > 1) {
 		return vec2(-1);
 	} else {
 		return ndcToImagePos(ndc);
-	}*/
+	}
 	return ndcToImagePos(ndc);
 }
 
@@ -792,6 +834,18 @@ vec4 normalPointPlaneToNormalDistPlane(vec3 normal, vec3 point) {
 	return vec4(normal, dot(normal, -point));
 }
 
+// http://www.neilmendoza.com/glsl-rotation-about-an-arbitrary-axis/
+mat4 rotationMatrix(vec3 axis, float angle) {
+    axis = normalize(axis);
+    float s = sin(angle);
+    float c = cos(angle);
+    float oc = 1.0 - c;
+    
+    return mat4(oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,  0.0,
+                oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,  0.0,
+                oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c,           0.0,
+                0.0,                                0.0,                                0.0,                                1.0);
+}
 
 
 // Bresenham's algortihm to plot Bezier curves from http://members.chello.at/~easyfilter/bresenham.html
@@ -857,15 +911,15 @@ void plotQuadBezierSegAA(int x0, int y0, int x1, int y1, int x2, int y2)
          cur = min(dx+xy,-xy-dy);
          ed = max(dx+xy,-xy-dy);           /* approximate error distance */
          ed = 255/(ed+2*ed*cur*cur/(4.*ed*ed+cur*cur)); 
-         drawGrassBladePixel(x0,y0, ed*abs(err-dx-dy-xy)/255);  /* plot curve */
+         drawGrassBladePixel(x0,y0, root, grassBladeNormal, ed*abs(err-dx-dy-xy)/255);  /* plot curve */
          if (x0 == x2 && y0 == y2) return;/* last pixel -> curve finished */
          x1 = x0; cur = dx-err; y1 = 2*err+dy < 0 ? 1 : 0;
          if (2*err+dx > 0) {                                    /* x step */
-            if (err-dy < ed) drawGrassBladePixel(x0,y0+sy, ed*abs(err-dy)/255);
+            if (err-dy < ed) drawGrassBladePixel(x0,y0+sy, root, grassBladeNormal, ed*abs(err-dy)/255);
             x0 += sx; dx -= xy; err += dy += yy;
          }
          if (y1 == 1) {                                         /* y step */
-            if (cur < ed) drawGrassBladePixel(x1+sx,y0, ed*abs(cur)/255);
+            if (cur < ed) drawGrassBladePixel(x1+sx,y0, root, grassBladeNormal, ed*abs(cur)/255);
             y0 += sy; dy -= xy; err += dx += xx; 
          }
       } while (dy < dx);              /* gradient negates -> close curves */
@@ -881,16 +935,16 @@ void plotLineAA(int x0, int y0, int x1, int y1)
    float ed = dx+dy == 0 ? 1 : sqrt(float(dx*dx)+float(dy*dy));
 
    for ( ; ; ){                                         /* pixel loop */
-      drawGrassBladePixel(x0,y0, abs(err-dx+dy)/ed);
+      drawGrassBladePixel(x0,y0, root, grassBladeNormal, abs(err-dx+dy)/ed);
       e2 = err; x2 = x0;
       if (2*e2 >= -dx) {                                    /* x step */
          if (x0 == x1) break;
-         if (e2+dy < ed) drawGrassBladePixel(x0,y0+sy, (e2+dy)/ed);
+         if (e2+dy < ed) drawGrassBladePixel(x0,y0+sy, root, grassBladeNormal, (e2+dy)/ed);
          err -= dy; x0 += sx; 
       } 
       if (2*e2 <= dy) {                                     /* y step */
          if (y0 == y1) break;
-         if (dx-e2 < ed) drawGrassBladePixel(x2+sx,y0, (dx-e2)/ed);
+         if (dx-e2 < ed) drawGrassBladePixel(x2+sx,y0, root, grassBladeNormal, (dx-e2)/ed);
          err += dx; y0 += sy; 
     }
   }

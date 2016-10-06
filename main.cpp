@@ -273,6 +273,7 @@ int run() {
 	auto csGrassConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CSGrassConstants));
 
 	// Compute Shader Grass
+	// Create result texture image
 	GLuint csResult;
 	glGenTextures(1, &csResult);
 	glActiveTexture(GL_TEXTURE0);
@@ -283,7 +284,14 @@ int run() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
-	/*s
+	// Create atomic counter
+	GLuint atomicsBuffer;
+	glGenBuffers(1, &atomicsBuffer);
+	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, atomicsBuffer);
+	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), NULL, GL_DYNAMIC_DRAW);
+	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+
+	/*
 	float stepDistFactor = (glm::length(camera.nearPoints[0] - camera.nearPoints[1]) / glm::length(camera.farPoints[0] - camera.farPoints[1]) - 1) / (camera.farPlane - camera.nearPlane);
 	// calc dist for horizontal length at normal dist to need to double to be the same length on the screen
 	float stepNormalDist = 2;
@@ -506,16 +514,28 @@ int run() {
 
 		// Compute Shader Grass
 		// auto csResult = renderTargetPool.acquire(ogl::TextureDesc::make2D(GL_TEXTURE_2D, GL_RGBA32F, screenDim.x, screenDim.y));
+		// result texture
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, csResult);
-		GLuint clearColor = 0;
-		glClearTexImage(csResult, 0, GL_RGB, GL_FLOAT, &clearColor);
+		GLuint clearColor[4] = { 0, 0, 0, 0 };
+		glClearTexImage(csResult, 0, GL_RGB, GL_FLOAT, clearColor);
 		glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+		if (frameIdx % 15 == 0) {
+			// reset atomic counter
+			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, atomicsBuffer);
+
+			GLuint a = 0;
+			glBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, sizeof(GLuint), &a);
+			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+		}
+
+		glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 4, atomicsBuffer);
 		{
 			glsl::CSGrassConstants csGrassConstants;
 
 
-			int tileDivisor = 128;
+			int tileDivisor = 32;
 			csGrassConstants.FtBDirection = camera.regGridDirection;
 			if (camera.regGridDirDiagonal) {
 				csGrassConstants.FtBDirection /= 2;
@@ -526,7 +546,7 @@ int run() {
 			csGrassConstants.MaxHeight = csGrassMaxHeight;
 			csGrassConstants.StepDist = stepDist;
 			csGrassConstants.TileDivisor = tileDivisor;
-			csGrassConstants.DrawDebugInfo = (int) drawDebugInfo;
+			csGrassConstants.DrawDebugInfo = (int)drawDebugInfo;
 			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
 
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
@@ -535,11 +555,13 @@ int run() {
 			computeShaderGrass.bind();
 			glDispatchCompute(screenDim.x / tileDivisor, screenDim.y / tileDivisor, 1);
 
-			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_ATOMIC_COUNTER_BARRIER_BIT);
 
 			// Draw result
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			hdrBuffer.bind(GL_FRAMEBUFFER);
-			glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+			glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 			glDisable(GL_DEPTH_TEST);
@@ -547,6 +569,18 @@ int run() {
 			nullVertexArrays.bind();
 			csResultShader.bind();
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+			glDisable(GL_BLEND);
+
+
+			if (frameIdx % 15 == 0) {
+				// get counter
+				GLuint counter = 0;
+				glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 4, atomicsBuffer);
+				glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, sizeof(GLuint), &counter);
+				glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 4, 0);
+				bladeCount = counter;
+			}
+			
 		}
 		
 
