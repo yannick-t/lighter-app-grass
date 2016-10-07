@@ -407,6 +407,7 @@ int run() {
 
 	int bladeCount = 0;
 
+	ogl::Event grassStart = ogl::Event::create(), grassEnd = ogl::Event::create();
 	while (!wnd.shouldClose()) {
 		glfwPollEvents();
 
@@ -530,6 +531,8 @@ int run() {
 			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
 		}
 
+		grassStart.record();
+
 		glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 4, atomicsBuffer);
 		{
 			glsl::CSGrassConstants csGrassConstants;
@@ -582,6 +585,8 @@ int run() {
 			}
 			
 		}
+
+		grassEnd.record();
 		
 
 		// Blit / tonemap
@@ -642,6 +647,7 @@ int run() {
 				glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
 				ui.addSlider(&dt, "dt (ms)", dt * 1000.0f, 500.0f, nullptr);
+				ui.addSlider(&dt, "grass (ms)", ogl::diffMS(grassStart, grassEnd), dt * 1000.0f, nullptr);
 
 				char fpsString[20];
 				_snprintf(fpsString, 20, "%f FPS", fps);
