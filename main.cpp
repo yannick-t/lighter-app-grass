@@ -522,7 +522,7 @@ int run() {
 		glClearTexImage(csResult, 0, GL_RGB, GL_FLOAT, clearColor);
 		glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
-		if (frameIdx % 15 == 0) {
+		if (false && frameIdx % 15 == 0) {
 			// reset atomic counter
 			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, atomicsBuffer);
 
@@ -575,7 +575,7 @@ int run() {
 			glDisable(GL_BLEND);
 
 
-			if (frameIdx % 15 == 0) {
+			if (false && frameIdx % 15 == 0) {
 				// get counter
 				GLuint counter = 0;
 				glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 4, atomicsBuffer);
