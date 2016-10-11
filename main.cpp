@@ -564,7 +564,7 @@ int run() {
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			hdrBuffer.bind(GL_FRAMEBUFFER);
-			glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+			// glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 			glDisable(GL_DEPTH_TEST);
@@ -573,21 +573,19 @@ int run() {
 			csResultShader.bind();
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 			glDisable(GL_BLEND);
-
-
-			if (false && frameIdx % 15 == 0) {
-				// get counter
-				GLuint counter = 0;
-				glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 4, atomicsBuffer);
-				glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, sizeof(GLuint), &counter);
-				glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 4, 0);
-				bladeCount = counter;
-			}
 			
 		}
 
 		grassEnd.record();
 		
+		if (false && frameIdx % 15 == 0) {
+			// get counter
+			GLuint counter = 0;
+			glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 4, atomicsBuffer);
+			glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, sizeof(GLuint), &counter);
+			glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 4, 0);
+			bladeCount = counter;
+		}
 
 		// Blit / tonemap
 		{

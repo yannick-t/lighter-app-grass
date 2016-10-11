@@ -21,6 +21,10 @@ vec4 getGrassBladeShading(vec3 pos, vec3 normal);
 
 void scanlineRasterizeGrassBlade(vec2 rootProj, vec2 cPProj, vec2 tipProj);
 
+void calcFrustumNormals();
+void calcFrustumRays();
+void calcFrustumIntersections(vec3 planePoint, vec3 planeNormal);
+
 float getStepSize(float dist, out float blend);
 float distPointRay(vec3 origin, vec3 direction, vec3 point);
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir);
@@ -48,6 +52,7 @@ vec2 worldPosToTilePos(vec3 pos);
 vec2 worldPosToImagePos(vec3 pos);
 vec2 ndcToImagePos(vec3 ndc);
 vec3 worldPosToNDC(vec3 pos);
+vec3 nDCToWorldPos(vec3 ndc);
 vec4 normalPointPlaneToNormalDistPlane(vec3 normal, vec3 point);
 
 mat4 rotationMatrix(vec3 axis, float angle);
@@ -76,6 +81,13 @@ layout(rgba32f, binding = 0) uniform image2D result;
 
 // properties of workgroup tile
 ivec2 tileCorner;
+
+vec3 frustumPointsNDC[8]; // nbl, ntl, nbr, ntr, fbl, ftl, fbr, ftr
+vec3 frustumPoints[8]; // nbl, ntl, nbr, ntr, fbl, ftl, fbr, ftr
+vec3 frustumPlaneNormals[6]; // right, left, top, bottom, near, far
+Ray frustumRays[12];
+int intersectionCount = 0;
+vec3 intersections[4];
 
 // propertiies of grass blades
 vec3 grassBladeNormal;
@@ -116,61 +128,59 @@ void main()
 
 
 	// Calculate frustum of this workgroup
-
-	vec3 frustumPoints[8]; // nbl, ntl, nbr, ntr, fbl, ftl, fbr, ftr
-	vec3 minFrustum = vec3((1.0 / 0.0));
-	vec3 maxFrustum = vec3(-(1.0 / 0.0));
-	vec3 frustumPlaneNormals[6]; // right, left, top, bottom, near, far
-	Ray frustumRays[12];
-
-	vec4 temp;
+	vec3 minFrustumNDC = vec3((1.0 / 0.0));
+	vec3 maxFrustumNDC = vec3(-(1.0 / 0.0));
 
 	int v = 0;
 	for(int i = 0; i < 8; i++) {
-		temp = camera.ViewProjInv * vec4(((gl_WorkGroupID.x + int(v / 2)) / tileCount.x) * 2 - 1, -(((gl_WorkGroupID.y + mod(v + 1, 2)) / tileCount.y) * 2 - 1), int(i / 4), 1.0);
-		frustumPoints[i] = temp.xyz / temp.w;
-
+		frustumPointsNDC[i] = vec3(((gl_WorkGroupID.x + int(v / 2)) / tileCount.x) * 2 - 1, -(((gl_WorkGroupID.y + mod(v + 1, 2)) / tileCount.y) * 2 - 1), int(i / 4));
+		minFrustumNDC = min(frustumPointsNDC[i], minFrustumNDC);
+		maxFrustumNDC = max(frustumPointsNDC[i], maxFrustumNDC);
+		frustumPoints[i] = nDCToWorldPos(frustumPointsNDC[i]);
 		v = int(mod(v + 1, 4));
 	}
-	
-	frustumPlaneNormals[0] = normalize(cross((frustumPoints[3] - frustumPoints[7]), (frustumPoints[6] - frustumPoints[7])));
-	frustumPlaneNormals[1] = normalize(cross((frustumPoints[4] - frustumPoints[5]), (frustumPoints[1] - frustumPoints[5])));
-	frustumPlaneNormals[2] = normalize(cross((frustumPoints[1] - frustumPoints[5]), (frustumPoints[7] - frustumPoints[5])));
-	frustumPlaneNormals[3] = normalize(cross((frustumPoints[6] - frustumPoints[4]), (frustumPoints[0] - frustumPoints[4])));
-	frustumPlaneNormals[4] = normalize(cross((frustumPoints[1] - frustumPoints[3]), (frustumPoints[2] - frustumPoints[3])));
-	frustumPlaneNormals[5] = normalize(cross((frustumPoints[6] - frustumPoints[7]), (frustumPoints[5] - frustumPoints[7])));
 
-
-	frustumRays[0] = Ray(frustumPoints[0], (frustumPoints[1] - frustumPoints[0]));
-	frustumRays[1] = Ray(frustumPoints[0], (frustumPoints[2] - frustumPoints[0]));
-	frustumRays[2] = Ray(frustumPoints[1], (frustumPoints[3] - frustumPoints[1]));
-	frustumRays[3] = Ray(frustumPoints[2], (frustumPoints[3] - frustumPoints[2]));
-
-	frustumRays[4] = Ray(frustumPoints[0], (frustumPoints[4] - frustumPoints[0]));
-	frustumRays[5] = Ray(frustumPoints[1], (frustumPoints[5] - frustumPoints[1]));
-	frustumRays[6] = Ray(frustumPoints[2], (frustumPoints[6] - frustumPoints[2]));
-	frustumRays[7] = Ray(frustumPoints[3], (frustumPoints[7] - frustumPoints[3]));
-
-	frustumRays[8] = Ray(frustumPoints[4], (frustumPoints[5] - frustumPoints[4]));
-	frustumRays[9] = Ray(frustumPoints[4], (frustumPoints[6] - frustumPoints[4]));
-	frustumRays[10] = Ray(frustumPoints[5], (frustumPoints[7] - frustumPoints[5]));
-	frustumRays[11] = Ray(frustumPoints[6], (frustumPoints[7] - frustumPoints[6]));
+	calcFrustumRays();
 
 	// intersect frustum rays with plane on which grass should be drawn
 	vec3 planePoint = vec3(0.0);
 	vec3 planeNormal = vec3(0.0, 1.0, 0.0);
 
-	vec3 intersections[4];
-	int intersectionCount = 0;
-	for(int i = 0; i < 12; i++) {
-		float t = intersectPlane(frustumRays[i], planePoint, planeNormal);
-		if(t >= 0 && t < 1) {
-			intersections[intersectionCount] = frustumRays[i].Start + t * frustumRays[i].Dir;
-			intersectionCount++;
+	calcFrustumIntersections(planePoint, planeNormal);
+
+
+	// expand frustum to contain grass blades where the cell isn't in the frustum but the top part of the blade can be
+	// Use the closest intersection to the camera find out what the height of a grass blade at that position in ndc is and expand the frustum by that value (towards the camera)
+	int closestIndex = 0;
+	float currentMinDist = 1.0 / 0.0;
+	float localDist = 0;
+	for(int i = 0; i < intersectionCount; i++) {
+		localDist = distance(intersections[i], camera.CamPos);
+		if(localDist < currentMinDist) {
+			closestIndex = i;
 		}
 	}
 
+	vec3 frustumTranslationNDC = vec3((worldPosToNDC(intersections[closestIndex]) - worldPosToNDC(intersections[closestIndex] + vec3(0.0, grassConsts.MaxHeight, 0.0))).xy, 0.0);
+	// Translate frustumPointsNDC and convert them to world coords
+	for(int i = 0; i < 8; i++) {
+		vec3 temp = frustumPointsNDC[i] + frustumTranslationNDC;
+		// Make sure frustum is expanded not shrunk
+		if(temp.x < minFrustumNDC.x || temp.x > maxFrustumNDC.x) {
+			frustumPointsNDC[i] = frustumPointsNDC[i] + vec3(frustumTranslationNDC.x, 0.0, 0.0);
+		}
+		if(temp.y < minFrustumNDC.y || temp.y > maxFrustumNDC.y) {
+			frustumPointsNDC[i] = frustumPointsNDC[i] + vec3(0.0, frustumTranslationNDC.y, 0.0);
+		}
 
+		frustumPoints[i] = nDCToWorldPos(frustumPointsNDC[i]);
+	}
+
+
+	// Recalc frustum
+	calcFrustumRays();
+	calcFrustumNormals();
+	calcFrustumIntersections(planePoint, planeNormal);
 	
 	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 0 /*|| gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 4*/) {
 
@@ -192,7 +202,7 @@ void main()
 		float stepSize = grassConsts.Step;
 		float blend;
 
-		// Find start point for iteration (minimum by ftb)
+		// Find minimum intersection(s) by ftb 
 		int index = 0;
 		for(int i = 1; i < intersectionCount; i++) {
 
@@ -201,6 +211,9 @@ void main()
 			}
 		}
 
+
+
+		// Declare start point for iteration
 		vec3 start = intersections[index];
 
 		stepSize = grassConsts.Step; //getStepSize(1/*distPointRay(start, lineDirection, camera.CamPos)*/, blend);
@@ -436,7 +449,7 @@ void main()
 			// drawWorldPos(currentPos + vec3(rand_next(rng) * localStepSize, 0.0, rand_next(rng) * localStepSize) , vec4(1.0, 1.0, 1.0, 1.0));
 			// drawWorldPos(currentPos, vec4(0.9, 0.9, 0.8, 1.0));
 			// drawGrassBlade(rng, currentPos, localStepSize);
-			drawTilePos(ivec2(worldPosToTilePos(currentPos)), vec4(1.0,1.0,1.0,1.0));
+			// drawTilePos(ivec2(worldPosToTilePos(currentPos)), vec4(1.0,1.0,1.0,1.0));
 
 
 			// get position of last thread to find the next cells to draw at
@@ -449,7 +462,7 @@ void main()
 
 	// Copy workgroup result to framebuffer
 	for(int i = 0; i < 32; i++) {
-		imageStore(result, tileCorner + ivec2(gl_LocalInvocationID.x, i), pixels[gl_LocalInvocationID.x][i]);
+		//imageStore(result, tileCorner + ivec2(gl_LocalInvocationID.x, i), pixels[gl_LocalInvocationID.x][i]);
 	}
 
 	if(grassConsts.DrawDebugInfo >= 2) {
@@ -460,7 +473,7 @@ void main()
 	}
 }
 
-
+// functions for drawing the grass blade
 void drawGrassBlade(RandState rng, vec3 pos, float stepSize) {
 	atomicCounterIncrement(bladeCount);
 	
@@ -636,7 +649,45 @@ vec4 getGrassBladeShading(vec3 pos, vec3 normal) {
 	
 }
 
-// Utility methods to handle points on the regular grid used to go through the grass blades
+// Functions to calculate the frustum
+void calcFrustumNormals() {
+	frustumPlaneNormals[0] = normalize(cross((frustumPoints[3] - frustumPoints[7]), (frustumPoints[6] - frustumPoints[7])));
+	frustumPlaneNormals[1] = normalize(cross((frustumPoints[4] - frustumPoints[5]), (frustumPoints[1] - frustumPoints[5])));
+	frustumPlaneNormals[2] = normalize(cross((frustumPoints[1] - frustumPoints[5]), (frustumPoints[7] - frustumPoints[5])));
+	frustumPlaneNormals[3] = normalize(cross((frustumPoints[6] - frustumPoints[4]), (frustumPoints[0] - frustumPoints[4])));
+	frustumPlaneNormals[4] = normalize(cross((frustumPoints[1] - frustumPoints[3]), (frustumPoints[2] - frustumPoints[3])));
+	frustumPlaneNormals[5] = normalize(cross((frustumPoints[6] - frustumPoints[7]), (frustumPoints[5] - frustumPoints[7])));
+}
+
+void calcFrustumRays() {
+	frustumRays[0] = Ray(frustumPoints[0], (frustumPoints[1] - frustumPoints[0]));
+	frustumRays[1] = Ray(frustumPoints[0], (frustumPoints[2] - frustumPoints[0]));
+	frustumRays[2] = Ray(frustumPoints[1], (frustumPoints[3] - frustumPoints[1]));
+	frustumRays[3] = Ray(frustumPoints[2], (frustumPoints[3] - frustumPoints[2]));
+
+	frustumRays[4] = Ray(frustumPoints[0], (frustumPoints[4] - frustumPoints[0]));
+	frustumRays[5] = Ray(frustumPoints[1], (frustumPoints[5] - frustumPoints[1]));
+	frustumRays[6] = Ray(frustumPoints[2], (frustumPoints[6] - frustumPoints[2]));
+	frustumRays[7] = Ray(frustumPoints[3], (frustumPoints[7] - frustumPoints[3]));
+
+	frustumRays[8] = Ray(frustumPoints[4], (frustumPoints[5] - frustumPoints[4]));
+	frustumRays[9] = Ray(frustumPoints[4], (frustumPoints[6] - frustumPoints[4]));
+	frustumRays[10] = Ray(frustumPoints[5], (frustumPoints[7] - frustumPoints[5]));
+	frustumRays[11] = Ray(frustumPoints[6], (frustumPoints[7] - frustumPoints[6]));
+}
+
+void calcFrustumIntersections(vec3 planePoint, vec3 planeNormal) {
+	intersectionCount = 0;
+	for(int i = 0; i < 12; i++) {
+		float t = intersectPlane(frustumRays[i], planePoint, planeNormal);
+		if(t >= 0 && t < 1) {
+			intersections[intersectionCount] = frustumRays[i].Start + t * frustumRays[i].Dir;
+			intersectionCount++;
+		}
+	}
+}
+
+// Utility functions to handle points on the regular grid used to go through the grass blades
 
 float distPointRay(vec3 origin, vec3 direction, vec3 point) {
 	return length(cross(normalize(direction), point - origin));
@@ -884,6 +935,11 @@ vec2 ndcToImagePos(vec3 ndc) {
 
 vec3 worldPosToNDC(vec3 pos) {
 	vec4 p1 = camera.ViewProj * vec4(pos, 1.0);
+	return p1.xyz / p1.w;
+}
+
+vec3 nDCToWorldPos(vec3 ndc) {
+	vec4 p1 = camera.ViewProjInv * vec4(ndc, 1.0);
 	return p1.xyz / p1.w;
 }
 
