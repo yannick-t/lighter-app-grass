@@ -556,7 +556,7 @@ int run() {
 			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 3);
 			csGrassConstBuffer.bind(GL_UNIFORM_BUFFER, 2);
 			computeShaderGrass.bind();
-			glDispatchCompute(screenDim.x / tileDivisor, screenDim.y / tileDivisor, 1);
+			glDispatchCompute(int(ceil((float) screenDim.x / tileDivisor)), int(ceil((float) screenDim.y / tileDivisor)), 1);
 
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_ATOMIC_COUNTER_BARRIER_BIT);
 

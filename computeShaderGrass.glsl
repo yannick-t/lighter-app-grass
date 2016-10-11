@@ -109,10 +109,12 @@ void main()
 	}
 
 
-	vec2 tileCount = ivec2(imageSize(result) / grassConsts.TileDivisor);
+	vec2 tileCount = vec2(imageSize(result) / float(grassConsts.TileDivisor));
 	// tileCorner = ivec2((gl_WorkGroupID.x) / tileCount.x * imageSize(result).x, ((gl_WorkGroupID.y) / tileCount.y) * imageSize(result).y);
-	vec2 tileSize = imageSize(result) / tileCount;
-	tileCorner = ivec2(gl_WorkGroupID.x * int(tileSize.x), gl_WorkGroupID.y * int(tileSize.y));
+	ivec2 tileSize = ivec2(grassConsts.TileDivisor);
+	tileCorner = ivec2(gl_WorkGroupID.x * tileSize.x, gl_WorkGroupID.y * tileSize.y);
+
+
 	// Calculate frustum of this workgroup
 
 	vec3 frustumPoints[8]; // nbl, ntl, nbr, ntr, fbl, ftl, fbr, ftr
@@ -433,8 +435,8 @@ void main()
 			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 			// drawWorldPos(currentPos + vec3(rand_next(rng) * localStepSize, 0.0, rand_next(rng) * localStepSize) , vec4(1.0, 1.0, 1.0, 1.0));
 			// drawWorldPos(currentPos, vec4(0.9, 0.9, 0.8, 1.0));
-			drawGrassBlade(rng, currentPos, localStepSize);
-			// drawTilePos(ivec2(worldPosToTilePos(currentPos)), vec4(1.0,1.0,1.0,1.0));
+			// drawGrassBlade(rng, currentPos, localStepSize);
+			drawTilePos(ivec2(worldPosToTilePos(currentPos)), vec4(1.0,1.0,1.0,1.0));
 
 
 			// get position of last thread to find the next cells to draw at
