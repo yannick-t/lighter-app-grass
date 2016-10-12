@@ -110,17 +110,6 @@ void main()
 		pixels[gl_LocalInvocationID.x][i] = vec4(0.0);
 	}
 
-	if(gl_GlobalInvocationID.x == 0) {
-		//vec3 quad[4] = {vec3(0), vec3(0) + vec3(0.0, 0.0, grassConsts.Step), vec3(0) + vec3(grassConsts.Step, 0.0, grassConsts.Step),
-		//			vec3(0) + vec3(grassConsts.Step, 0.0, 0.0)};
-		//for(int l = 0; l < 4; l++) {
-			//drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0, 1.0, 1.0, 1.0));
-		//}
-		//RandState rng = rand_init(0, 0);
-		//drawGrassBlade(rng, vec3(0));
-	}
-
-
 	vec2 tileCount = vec2(imageSize(result) / float(grassConsts.TileDivisor));
 	// tileCorner = ivec2((gl_WorkGroupID.x) / tileCount.x * imageSize(result).x, ((gl_WorkGroupID.y) / tileCount.y) * imageSize(result).y);
 	ivec2 tileSize = ivec2(grassConsts.TileDivisor);
@@ -147,42 +136,46 @@ void main()
 	vec3 planeNormal = vec3(0.0, 1.0, 0.0);
 
 	calcFrustumIntersections(planePoint, planeNormal);
-
-
-	// expand frustum to contain grass blades where the cell isn't in the frustum but the top part of the blade can be
-	// Use the closest intersection to the camera find out what the height of a grass blade at that position in ndc is and expand the frustum by that value (towards the camera)
-	int closestIndex = 0;
-	float currentMinDist = 1.0 / 0.0;
-	float localDist = 0;
-	for(int i = 0; i < intersectionCount; i++) {
-		localDist = distance(intersections[i], camera.CamPos);
-		if(localDist < currentMinDist) {
-			closestIndex = i;
-		}
-	}
-
-	vec3 frustumTranslationNDC = vec3((worldPosToNDC(intersections[closestIndex]) - worldPosToNDC(intersections[closestIndex] + vec3(0.0, grassConsts.MaxHeight, 0.0))).xy, 0.0);
-	// Translate frustumPointsNDC and convert them to world coords
-	for(int i = 0; i < 8; i++) {
-		vec3 temp = frustumPointsNDC[i] + frustumTranslationNDC;
-		// Make sure frustum is expanded not shrunk
-		if(temp.x < minFrustumNDC.x || temp.x > maxFrustumNDC.x) {
-			frustumPointsNDC[i] = frustumPointsNDC[i] + vec3(frustumTranslationNDC.x, 0.0, 0.0);
-		}
-		if(temp.y < minFrustumNDC.y || temp.y > maxFrustumNDC.y) {
-			frustumPointsNDC[i] = frustumPointsNDC[i] + vec3(0.0, frustumTranslationNDC.y, 0.0);
-		}
-
-		frustumPoints[i] = nDCToWorldPos(frustumPointsNDC[i]);
-	}
-
-
-	// Recalc frustum
-	calcFrustumRays();
-	calcFrustumNormals();
-	calcFrustumIntersections(planePoint, planeNormal);
 	
-	if(intersectionCount > 3 /*&& gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 0 /*|| gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 4*/) {
+	
+	if(intersectionCount > 3 /*&& (gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 15 || gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 19)*/) {
+	
+		
+		// expand frustum to contain grass blades where the cell isn't in the frustum but the top part of the blade can be
+		// Use the closest intersection to the camera find out what the height of a grass blade at that position in ndc is and expand the frustum by that value (towards the camera)
+		int closestIndex = 0;
+		float currentMinDist = 1.0 / 0.0;
+		float localDist = 0;
+		for(int i = 0; i < intersectionCount; i++) {
+			localDist = distance(intersections[i], camera.CamPos);
+			if(localDist < currentMinDist) {
+				closestIndex = i;
+			}
+		}
+
+		vec3 frustumTranslationNDC = vec3((worldPosToNDC(intersections[closestIndex]) - worldPosToNDC(intersections[closestIndex] + vec3(0.0, grassConsts.MaxHeight, 0.0))).xy, 0.0);
+		// Translate frustumPointsNDC and convert them to world coords
+		for(int i = 0; i < 8; i++) {
+			vec3 temp = frustumPointsNDC[i] + frustumTranslationNDC;
+			// Make sure frustum is expanded not shrunk
+			if(minFrustumNDC.x == frustumPointsNDC[i].x && temp.x < minFrustumNDC.x ||
+			   maxFrustumNDC.x == frustumPointsNDC[i].x && temp.x > maxFrustumNDC.x) {
+				frustumPointsNDC[i] = frustumPointsNDC[i] + vec3(frustumTranslationNDC.x, 0.0, 0.0);
+			}
+			if(minFrustumNDC.y == frustumPointsNDC[i].y && temp.y < minFrustumNDC.y ||
+			   maxFrustumNDC.y == frustumPointsNDC[i].y && temp.y > maxFrustumNDC.y) {
+				frustumPointsNDC[i] = frustumPointsNDC[i] + vec3(0.0, frustumTranslationNDC.y, 0.0);
+			}
+
+			frustumPoints[i] = nDCToWorldPos(frustumPointsNDC[i]);
+		}
+
+
+		// Recalc frustum
+		calcFrustumRays();
+		calcFrustumNormals();
+		calcFrustumIntersections(planePoint, planeNormal);
+
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
 		vec3 lineDirection = grassConsts.PerpFtBDir;
@@ -244,18 +237,6 @@ void main()
 			frustumPlanesToCheckFtB[i] = dot(grassConsts.PerpFtBDir, frustumPlaneNormals[i]) >= 0;
 			frustumPlanesToCheck[i] = frustumPlanesToCheckLine[i] || frustumPlanesToCheckFtB[i];
 			// drawNDC(vec3(0.5 + float(i) / 24, 0.5, 0.5), vec4(frustumPlanesToCheckLine[i] ? 0.0 : 1.0, frustumPlanesToCheckLine[i] ? 1.0 : 0.0, 0.0, 1.0));
-		}
-
-
-		if(grassConsts.DrawDebugInfo >= 1.0) {
-			// debug - draw frustum intersections
-			for(int i = 0; i < intersectionCount; i++) {
-				if (i == index) {
-					drawWorldPos(intersections[i], vec4(1.0, 1.0, 1.0, 1.0));
-				} else {
-					drawWorldPos(intersections[i], vec4(0.0, 1.0, 1.0, 1.0)); // Draw intersection points
-				}
-			}
 		}
 
 		// Iterate through cells
@@ -448,7 +429,7 @@ void main()
 			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 			// drawWorldPos(currentPos + vec3(rand_next(rng) * localStepSize, 0.0, rand_next(rng) * localStepSize) , vec4(1.0, 1.0, 1.0, 1.0));
 			// drawWorldPos(currentPos, vec4(0.9, 0.9, 0.8, 1.0));
-			// drawGrassBlade(rng, currentPos, localStepSize);
+			drawGrassBlade(rng, currentPos, localStepSize);
 			// drawTilePos(ivec2(worldPosToTilePos(currentPos)), vec4(1.0,1.0,1.0,1.0));
 
 
@@ -462,7 +443,7 @@ void main()
 
 	// Copy workgroup result to framebuffer
 	for(int i = 0; i < 32; i++) {
-		//imageStore(result, tileCorner + ivec2(gl_LocalInvocationID.x, i), pixels[gl_LocalInvocationID.x][i]);
+		imageStore(result, tileCorner + ivec2(gl_LocalInvocationID.x, i), pixels[gl_LocalInvocationID.x][i]);
 	}
 
 	if(grassConsts.DrawDebugInfo >= 2) {
@@ -470,6 +451,13 @@ void main()
 		drawImageLine(vec2(tileCorner) + vec2(tileSize.x, 0.0), vec2(tileCorner) + vec2(tileSize.x, tileSize.y), vec4(1.0, 1.0, 1.0, 1.0));
 		drawImageLine(vec2(tileCorner) + vec2(0.0, tileSize.y), vec2(tileCorner) + vec2(tileSize.x, tileSize.y), vec4(1.0, 1.0, 1.0, 1.0));
 		drawImageLine(vec2(tileCorner) + vec2(0.0, tileSize.y), vec2(tileCorner), vec4(1.0, 1.0, 1.0, 1.0));
+	}
+
+	if(grassConsts.DrawDebugInfo >= 1.0) {
+		// debug - draw frustum intersections
+		for(int i = 0; i < intersectionCount; i++) {
+			drawWorldPos(intersections[i], vec4(0.0, 1.0, 1.0, 1.0)); // Draw intersection points
+		}
 	}
 }
 
@@ -514,20 +502,12 @@ void drawGrassBlade(RandState rng, vec3 pos, float stepSize) {
 	rootProj = worldPosToTilePos(root);
 	cPProj = worldPosToTilePos(cP);
 	tipProj = worldPosToTilePos(tip);
-
-	if(rootProj.x < 0) {
-		return;
-	}
 	
-	if(rootProj.x < 0 || cPProj.x < 0 || tipProj.x < 0) {
-		return;
-	}
-	
-	//drawTilePos(ivec2(rootProj), vec4(1.0,1.0,1.0,1.0));
+	// drawTilePos(ivec2(rootProj), vec4(1.0,1.0,1.0,1.0));
 	//drawImageLine(rootProj, cPProj, vec4(0.5,0.5,0.5,1.0));
-	//drawTilePos(ivec2(cPProj), vec4(1.0,1.0,1.0,1.0));
+	// drawTilePos(ivec2(cPProj), vec4(1.0,1.0,1.0,1.0));
 	//drawImageLine(cPProj, tipProj, vec4(0.5,0.5,0.5,1.0));
-	//drawTilePos(ivec2(tipProj), vec4(1.0,1.0,1.0,1.0));
+	// drawTilePos(ivec2(tipProj), vec4(1.0,1.0,1.0,1.0));
 	
 	// Generate random color
 	grassBladeBasecolor = vec4(rand_next(rng) * 0.2, rand_next(rng) * 1.0, rand_next(rng) * 0.1, 1.0);
@@ -541,15 +521,11 @@ void drawGrassBlade(RandState rng, vec3 pos, float stepSize) {
 }
 
 void scanlineRasterizeGrassBlade(vec2 rootProj, vec2 cPProj, vec2 tipProj) {
-	float start = min(min(min(tipProj.y, cPProj.y), rootProj.y), 0); // Todo: maybe better start
-	float end = max(max(max(tipProj.y, cPProj.y), rootProj.y), 31);
-	float itStep = 1;
-	if(start > end) {
-		itStep = -1;
-	}
+	float start = 0; // min(min(min(tipProj.y, cPProj.y), rootProj.y), 31); // Todo: maybe better start
+	float end = 31; //max(max(max(tipProj.y, cPProj.y), rootProj.y), 0);
 
 	bool cont = true;
-	for (float y = start; itStep > 0 ? y <= end : y >= end; y += itStep) {
+	for (float y = start; y <= end; y++) {
 		// intersect scanline with curve
 		if (cPProj.y == (rootProj.y + tipProj.y) / 2 && rootProj.y - tipProj.y != 0) {
 			float t = (rootProj.y - y) / (rootProj.y - tipProj.y);
@@ -606,14 +582,18 @@ bool drawGrassBladePixel(float y, float t) {
 }
 
 bool drawGrassBladePixelBlend(int x, int y, vec4 color) {
-	memoryBarrierShared();
-	float srcAlpha = pixels[x][y].a;
-	if(x >= 0 && x < 32 && srcAlpha < 1.0) {
-		pixels[x][y] = srcAlpha * pixels[x][y] + (1 - srcAlpha) * color;
-		// pixels[x][y] = color;
-		return true;
+	if(x >= 0 && x < 32) {
+		float srcAlpha = pixels[x][y].a;
+		if(srcAlpha < 1.0) {
+			pixels[x][y] = srcAlpha * pixels[x][y] + (1 - srcAlpha) * color;
+			// pixels[x][y] = color;
+			return true;
+		} else {
+			return false;
+		}
+		
 	}
-	return false;
+	return true;
 }
 
 // calculates shading and AO for a grass blade pixel
