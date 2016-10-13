@@ -193,6 +193,8 @@ namespace main_ex {
 float csGrassStepSize = 0.06;
 float csGrassMinHeight = 0.06;
 float csGrassMaxHeight = 0.16;
+float csGrassMinWidth = 0.0001;
+float csGrassMaxWidth = 0.001;
 float stepDist = 2;
 float drawDebugInfo = 0;
 
@@ -363,6 +365,8 @@ int run() {
 			ui.addSlider(&csGrassStepSize, "initial grid size", csGrassStepSize, 1.0f, csGrassStepSize, 0.1f);
 			ui.addSlider(&csGrassMinHeight, "grass blade min height", csGrassMinHeight, 1.0f, csGrassMinHeight, 0.1f);
 			ui.addSlider(&csGrassMaxHeight, "grass blade max height", csGrassMaxHeight, 1.0f, csGrassMaxHeight, 0.1f);
+			ui.addSlider(&csGrassMinWidth, "grass blade min width", csGrassMinWidth, csGrassMaxHeight / 4, csGrassMinWidth, 0.1f);
+			ui.addSlider(&csGrassMaxWidth, "grass blade max width", csGrassMaxWidth, csGrassMaxHeight / 4, csGrassMaxWidth, 0.1f);
 			ui.addSlider(&stepDist, "distance for the step size to double", stepDist, 10.0f, stepDist, 0.1f);
 			ui.addSlider(&drawDebugInfo, "level of debug info", drawDebugInfo, 10.0f, drawDebugInfo, 1.0f);
 			//			if (auto uiUnion = ui::Union(ui)) 
@@ -547,6 +551,8 @@ int run() {
 			csGrassConstants.Step = csGrassStepSize;
 			csGrassConstants.MinHeight = csGrassMinHeight;
 			csGrassConstants.MaxHeight = csGrassMaxHeight;
+			csGrassConstants.MinWidth = csGrassMinWidth;
+			csGrassConstants.MaxWidth = csGrassMaxWidth;
 			csGrassConstants.StepDist = stepDist;
 			csGrassConstants.TileDivisor = tileDivisor;
 			csGrassConstants.DrawDebugInfo = (int)drawDebugInfo;

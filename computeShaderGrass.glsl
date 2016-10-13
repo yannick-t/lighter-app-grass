@@ -42,7 +42,7 @@ bool quadOutsideFrustum(vec3 points[4], bool whichPlanes[6], vec3 frustumPlaneNo
 bool pointsOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 points[4]);
 bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point, float epsilon);
 
-void drawTilePos(ivec2 pos, vec4 color);
+void drawTilePos(vec2 pos, vec4 color);
 void drawWorldLine(vec3 start, vec3 end, vec4 color);
 void drawImageLine(vec2 imageStart, vec2 imageEnd, vec4 color);
 void drawWorldPos(vec3 pos, vec4 color);
@@ -90,8 +90,12 @@ int intersectionCount = 0;
 vec3 intersections[4];
 
 // propertiies of grass blades
-vec3 grassBladeNormal;
-vec4 grassBladeBasecolor;
+vec3 normal;
+vec4 baseColor;
+
+float width;
+float widthPx;
+float tipLengthT;
 
 vec3 root;
 vec3 cP;
@@ -111,7 +115,6 @@ void main()
 	}
 
 	vec2 tileCount = vec2(imageSize(result) / float(grassConsts.TileDivisor));
-	// tileCorner = ivec2((gl_WorkGroupID.x) / tileCount.x * imageSize(result).x, ((gl_WorkGroupID.y) / tileCount.y) * imageSize(result).y);
 	ivec2 tileSize = ivec2(grassConsts.TileDivisor);
 	tileCorner = ivec2(gl_WorkGroupID.x * tileSize.x, gl_WorkGroupID.y * tileSize.y);
 
@@ -173,8 +176,8 @@ void main()
 
 		// Recalc frustum
 		calcFrustumRays();
-		calcFrustumNormals();
 		calcFrustumIntersections(planePoint, planeNormal);
+		calcFrustumNormals();
 
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
@@ -358,6 +361,7 @@ void main()
 					maskedOut = localStepSize > stepSize;
 					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
 
+
 					
 					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
 					if(!maskedOut) {
@@ -467,18 +471,18 @@ void drawGrassBlade(RandState rng, vec3 pos, float stepSize) {
 	
 	// Calculate a random stable normal sized cell if the cell is bigger than the normal one
 	// do this by finding a random one of the smaller cells with half the step size until the stepSize is the initial one
-	/*
+	
 	float halfStep;
 	while(grassConsts.Step < stepSize) {
 		halfStep = stepSize / 2;
-		pos = pos + vec3(floor(rand_next(rng) * halfStep / grassConsts.Step) * halfStep, 0.0, floor(rand_next(rng) * halfStep / grassConsts.Step) * halfStep);
+		pos = pos + vec3(floor(rand_next(rng) * stepSize / halfStep) * halfStep, 0.0, floor(rand_next(rng) * stepSize / halfStep) * halfStep);
 		ivec2 seedPos = ivec2(round(pos.xz / grassConsts.Step));
 		rng = rand_init(seedPos.x, seedPos.y);
 		// pull one random number like it is done usually to calculate the blend for stability
 		rand_next(rng);
 
 		stepSize = halfStep;
-	}*/
+	}
 
 	float minHeight = grassConsts.MinHeight;
 	float maxHeight = grassConsts.MaxHeight;
@@ -488,9 +492,11 @@ void drawGrassBlade(RandState rng, vec3 pos, float stepSize) {
 	// Random generation of grass blade properties
 	float cPHeight = minHeight + rand_next(rng) * (maxHeight - minHeight);
 	float tipHeight = cPHeight + rand_next(rng) * (maxHeight - cPHeight);
-	
 
-	root = pos;// + vec3((rand_next(rng) * grassConsts.Step), 0, (rand_next(rng) * grassConsts.Step));
+	width = grassConsts.MinWidth + rand_next(rng) * (grassConsts.MaxWidth - grassConsts.MinWidth);
+	tipLengthT = minHeight / 2 + rand_next(rng) * (1 - minHeight / 2);
+	
+	root = pos + vec3((rand_next(rng) * grassConsts.Step), 0, (rand_next(rng) * grassConsts.Step));
 	cP = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step),
 		cPHeight,
 		(rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step));
@@ -498,23 +504,24 @@ void drawGrassBlade(RandState rng, vec3 pos, float stepSize) {
 		tipHeight,
 		(rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step));
 
-
 	rootProj = worldPosToTilePos(root);
 	cPProj = worldPosToTilePos(cP);
 	tipProj = worldPosToTilePos(tip);
 	
-	// drawTilePos(ivec2(rootProj), vec4(1.0,1.0,1.0,1.0));
+	// drawWorldPos(root, vec4(1.0,1.0,1.0,1.0));
+	// drawTilePos(rootProj, vec4(1.0,1.0,1.0,1.0));
 	//drawImageLine(rootProj, cPProj, vec4(0.5,0.5,0.5,1.0));
 	// drawTilePos(ivec2(cPProj), vec4(1.0,1.0,1.0,1.0));
 	//drawImageLine(cPProj, tipProj, vec4(0.5,0.5,0.5,1.0));
 	// drawTilePos(ivec2(tipProj), vec4(1.0,1.0,1.0,1.0));
 	
 	// Generate random color
-	grassBladeBasecolor = vec4(rand_next(rng) * 0.2, rand_next(rng) * 1.0, rand_next(rng) * 0.1, 1.0);
+	baseColor = vec4(rand_next(rng) * 0.2, rand_next(rng) * 1.0, rand_next(rng) * 0.1, 1.0);
 	// Generate normal pointing towards the controlPoint
-	grassBladeNormal = normalize(cP - (root + tip) / 2);
-
+	normal = normalize(cP - (root + tip) / 2);
+	vec3 normalPerpRotationAxis = normalize(cross(root - cP, tip - cP));
 	normalPerpRotation = rotationMatrix(cross(root - cP, tip - cP), 3 / 2 * PI);
+	widthPx = round(max(distance(worldPosToImagePos(root), worldPosToImagePos(root + normalPerpRotationAxis * width)), 1.0));
 
 	// scanline rasterization
 	scanlineRasterizeGrassBlade(rootProj, cPProj, tipProj);
@@ -549,7 +556,7 @@ void scanlineRasterizeGrassBlade(vec2 rootProj, vec2 cPProj, vec2 tipProj) {
 			}
 		}
 
-		// if(!cont) break;
+		if(!cont) break;
 	}
 }
 
@@ -560,45 +567,58 @@ bool drawGrassBladePixel(float y, float t) {
 	float x = pow(1 - t, 2) * rootProj.x + 2 * (1 - t) * t * cPProj.x + pow(t, 2) * tipProj.x;
 	vec3 pos = pow(1 - t, 2) * root + 2 * (1 - t) * t * cP + pow(t, 2) * tip;
 	vec3 tangent = 2 * (-2 * cP * t + cP + root * (t - 1) + t * tip);
-	vec3 normal = normalize((normalPerpRotation * vec4(tangent, 1.0)).xyz);
+	vec3 n = normalize((normalPerpRotation * vec4(tangent, 1.0)).xyz);
+
+	if (x < 0 || x > 31) {
+		return true;
+	}
 
 	// get shading
-	vec4 color = getGrassBladeShading(pos, normal);
+	vec4 color = getGrassBladeShading(pos, n);
+
+	// draw
+	int ix;
+	int iy = int(y);
+	int xStart = int(max(x, 0));
+	float widthScaling = 1 - ((t - (1 - tipLengthT)) / tipLengthT);
+	x = widthScaling > 1 ? x + widthPx : x + widthScaling * widthPx; 
+	int xEnd = int(min(x + widthPx, 31));
+
+	bool continueDrawing = false;
+	for(ix = xStart; ix <= xEnd; ix++) {
+		continueDrawing = drawGrassBladePixelBlend(ix, iy, color) || continueDrawing;
+	}
 
 	// Antialiasing
 	float b = modf(x, x);
-	int nextPixel = b < 0.5 ? -1 : 1;
+	int aaPixel = (b < 0.5 ? xStart - 1 : ix);
 	b = abs((b - 0.5) * 2);
 
-	// store pixel color, apply blending
-	int ix = int(x), iy = int(y);
-	/*if(iy < 0 && iy > 31) {
-		return false;
-	}*/
-	bool continueDrawing = drawGrassBladePixelBlend(ix, iy, color);
-	continueDrawing = continueDrawing || drawGrassBladePixelBlend(ix + nextPixel, iy, color);
+	if(aaPixel < 0 || aaPixel > 31) {
+		return true;
+	}
+	// color.a = b;
+	continueDrawing = drawGrassBladePixelBlend(aaPixel, iy, b * color) || continueDrawing;
 
 	return continueDrawing;
 }
 
 bool drawGrassBladePixelBlend(int x, int y, vec4 color) {
-	if(x >= 0 && x < 32) {
-		float srcAlpha = pixels[x][y].a;
-		if(srcAlpha < 1.0) {
-			pixels[x][y] = srcAlpha * pixels[x][y] + (1 - srcAlpha) * color;
-			// pixels[x][y] = color;
-			return true;
-		} else {
-			return false;
-		}
-		
+
+	float srcAlpha = pixels[x][y].a;
+	if(srcAlpha < 1.0) {
+		pixels[x][y] = srcAlpha * pixels[x][y] + (1 - srcAlpha) * color;
+		//pixels[x][y] = color;
+		return true;
+	} else {
+		return false;
 	}
-	return true;
+		
 }
 
 // calculates shading and AO for a grass blade pixel
-vec4 getGrassBladeShading(vec3 pos, vec3 normal) {
-	vec4 color = grassBladeBasecolor;
+vec4 getGrassBladeShading(vec3 pos, vec3 n) {
+	vec4 color = baseColor;
 
 	// fake AO (darker the closer to the ground, curve starts at the bottom)
 	float aoDist = grassConsts.MinHeight; // Todo
@@ -606,21 +626,21 @@ vec4 getGrassBladeShading(vec3 pos, vec3 normal) {
 
 	// Shading
 	// double sided
-	if(dot(normal, camera.CamDir) > 0) {
-		grassBladeNormal = -grassBladeNormal;
+	if(dot(n, camera.CamDir) > 0) {
+		n = -n;
 	}
 
-	float lambertian = -dot(normal, light.Direction);
+	float lambertian = -dot(n, light.Direction);
 	float specular = 0.0;
 	if(lambertian >= 0) {
-		vec3 halfDir = normalize(-light.Direction + camera.CamDir);
-		float specAngle = max(dot(halfDir, normal), 0.0);
+		vec3 halfDir = normalize(-light.Direction - camera.CamDir);
+		float specAngle = max(dot(halfDir, n), 0.0);
 		specular = pow(specAngle, shininess);
 
-		color = lambertian * mix(grassBladeBasecolor, light.Color, 0.2) + specular * light.Color;
+		color = lambertian * mix(baseColor, light.Color, 0.2) + specular * light.Color;
 	} else {
 		// back lighting - less bright
-		color = ((- lambertian) / 2) * mix(grassBladeBasecolor, light.Color, 0.3);
+		color = ((- lambertian) / 2) * mix(baseColor, light.Color, 0.3);
 	}
 	
 	color = vec4(aoFactor * color.rgb, color.a);
@@ -841,9 +861,9 @@ bool pointOutsideOfPlane(vec3 planePoint, vec3 planeNormal, vec3 point, float ep
 
 
 // methods to draw single pixels
-void drawTilePos(ivec2 pos, vec4 color) {
+void drawTilePos(vec2 pos, vec4 color) {
 	if(pos.x >= 0 && pos.x < 32 && pos.y >= 0 && pos.y < 32) {
-		pixels[pos.x][pos.y] = color;
+		pixels[int(pos.x)][int(pos.y)] = color;
 	}
 }
 
