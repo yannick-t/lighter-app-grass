@@ -353,6 +353,11 @@ int run() {
 		enableUi = !enableUi;
 	};
 
+	bool countGrassBlades = true;
+	keyboard.keyEvent[GLFW_KEY_C].pressOnce = [&]() {
+		countGrassBlades = !countGrassBlades;
+	};
+
 	float camSpeed = 1.0f;
 
 	std::string testString = "test str";
@@ -526,7 +531,7 @@ int run() {
 		glClearTexImage(csResult, 0, GL_RGB, GL_FLOAT, clearColor);
 		glBindImageTexture(0, csResult, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
-		if (false && frameIdx % 15 == 0) {
+		if (countGrassBlades && frameIdx % 15 == 0) {
 			// reset atomic counter
 			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, atomicsBuffer);
 
@@ -571,8 +576,8 @@ int run() {
 			glBlendEquation(GL_FUNC_ADD);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			hdrBuffer.bind(GL_FRAMEBUFFER);
-			glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+			//glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 			glDisable(GL_DEPTH_TEST);
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
@@ -585,7 +590,7 @@ int run() {
 
 		grassEnd.record();
 		
-		if (false && frameIdx % 15 == 0) {
+		if (countGrassBlades && frameIdx % 15 == 0) {
 			// get counter
 			GLuint counter = 0;
 			glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 4, atomicsBuffer);

@@ -452,8 +452,8 @@ void main()
 			// drawWorldPos(currentPos + vec3(rand_next(rng) * localStepSize, 0.0, rand_next(rng) * localStepSize) , vec4(1.0, 1.0, 1.0, 1.0));
 			// drawWorldPos(currentPos, vec4(0.9, 0.9, 0.8, 1.0));
 			// drawWorldPos(currentPos, vec4(alpha, alpha, alpha, 1));
-			// drawGrassBlade(currentPos, localStepSize);
-			drawTilePos(worldPosToTilePos(currentPos), vec4(1.0,1.0,1.0,1.0));
+			drawGrassBlade(currentPos, localStepSize);
+			drawTilePos(worldPosToTilePos(currentPos), vec4(0.1,0.2,0.3,0.9));
 			// drawTilePos(vec2(0), vec4(1));
 
 
