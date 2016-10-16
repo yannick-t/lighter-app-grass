@@ -14,7 +14,7 @@ shared vec3 lastPosition;
 
 shared vec4 pixels[32][32];
 
-void drawGrassBlade(RandState rng, vec3 pos, float stepSize);
+void drawGrassBlade(vec3 pos, float stepSize);
 bool drawGrassBladePixel(float y, float t);
 bool drawGrassBladePixelBlend(int x, int y, vec4 color);
 vec4 getGrassBladeShading(vec3 pos, vec3 normal);
@@ -55,6 +55,7 @@ vec3 worldPosToNDC(vec3 pos);
 vec3 nDCToWorldPos(vec3 ndc);
 vec4 normalPointPlaneToNormalDistPlane(vec3 normal, vec3 point);
 
+bool epsilonEq(float arg1, float arg2);
 mat4 rotationMatrix(vec3 axis, float angle);
 
 void plotQuadBezier(int x0, int y0, int x1, int y1, int x2, int y2);
@@ -141,7 +142,7 @@ void main()
 	calcFrustumIntersections(planePoint, planeNormal);
 	
 	
-	if(intersectionCount > 3 /*&& (gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 15 || gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 19)*/) {
+	if(intersectionCount > 3 /*&& (gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 6 || gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 19)*/) {
 	
 		
 		// expand frustum to contain grass blades where the cell isn't in the frustum but the top part of the blade can be
@@ -221,6 +222,7 @@ void main()
 
 			if(distance(start, s1) < distance(start, s2)) {
 				start = s1;
+				start = floorGridPointByDir(start, lineDirection, stepSize);
 			} else {
 				start = s2;
 			}
@@ -361,21 +363,37 @@ void main()
 					maskedOut = localStepSize > stepSize;
 					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
 
-
 					
 					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
 					if(!maskedOut) {
-						iPos = ivec2(round((currentPos.xz / localStepSize)));
-						bool uneven = ((iPos.x | iPos.y) & 1) != 0;
-						
+						// work with next bigger step size 
+						// mask out 3 cells at a time to create one cell of the next step size (expand the 4th one)
+						float nextStepSize = localStepSize * 2;
+
+						// decide with the position of the bigger cell if the cell will be masked out
+						vec3 relativePos = currentPos / nextStepSize;
+						vec3 nextBiggerCellPos = floor(relativePos + vec3(Epsilon)) * nextStepSize;
+						seedPos = ivec2(round(nextBiggerCellPos.xz / grassConsts.Step));
+
+						// get correct blend
+						float cornerCellStepSize = getStepSize(distance(nextBiggerCellPos, camera.CamPos), blend);
+
+						// pull random number
 						rng = rand_init(seedPos.x, seedPos.y);
 						rand = rand_next(rng);
 
-						if (uneven) {
-							alpha = (rand - blend) / rand; // Calculate an alpha value representing how close a cell is to being masked out
+						bool makeBigger = 
+							(rand < blend ||									// randomly mask out, the closer to the next step size the more probable to be masked out
+							epsilonEq(cornerCellStepSize, nextStepSize))		// If the corner of the bigger cell is already in the next step size mask out (workaround because blend value is off in this case)
+							&& cornerCellStepSize >= localStepSize - Epsilon;	// If the corner of the bigger cell is in the next smaller step size don't mask out (workaround because blend value is off in this case)
+						if(makeBigger && epsilonEq(currentPos.x, nextBiggerCellPos.x) && epsilonEq(currentPos.z, nextBiggerCellPos.z)) {
+							// bottom left corner of the bigger cell
+							localStepSize = nextStepSize;
+						} else {
+							maskedOut = makeBigger;
+							// alpha = (rand - blend) / (1 - blend); // Calculate an alpha value representing how close a cell is to being masked out
 						}
-						maskedOut = rand < blend;
-						maskedOut = maskedOut && uneven;
+						
 					}
 					
 				} else {
@@ -411,7 +429,7 @@ void main()
 				i++;
 				searchIt++;
 				if (i >= maxIt/* || searchIt > maxItPerSearch*/) {
-					// if(grassConsts.DrawDebugInfo >= 3) drawWorldPos(p / 8, vec4(1.0, 1.0, 0.0, 1.0));
+					// drawWorldPos(p / 8, vec4(1.0, 1.0, 0.0, 1.0));
 
 					done = true;
 					break;
@@ -424,17 +442,19 @@ void main()
 
 			// found position -> draw
 			
-			//vec3 quad[4] = {currentPos, currentPos + vec3(0.0, 0.0, localStepSize), currentPos + vec3(localStepSize, 0.0, localStepSize),
-			//		currentPos + vec3(localStepSize, 0.0, 0.0)};
-			//for(int l = 0; l < 4; l++) {
+			vec3 quad[4] = {currentPos, currentPos + vec3(0.0, 0.0, localStepSize), currentPos + vec3(localStepSize, 0.0, localStepSize),
+					currentPos + vec3(localStepSize, 0.0, 0.0)};
+			for(int l = 0; l < 4; l++) {
 				// drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 				// drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0, 1.0, 1.0, 1.0));
-			//}
+			}
 			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 			// drawWorldPos(currentPos + vec3(rand_next(rng) * localStepSize, 0.0, rand_next(rng) * localStepSize) , vec4(1.0, 1.0, 1.0, 1.0));
 			// drawWorldPos(currentPos, vec4(0.9, 0.9, 0.8, 1.0));
-			drawGrassBlade(rng, currentPos, localStepSize);
-			// drawTilePos(ivec2(worldPosToTilePos(currentPos)), vec4(1.0,1.0,1.0,1.0));
+			// drawWorldPos(currentPos, vec4(alpha, alpha, alpha, 1));
+			// drawGrassBlade(currentPos, localStepSize);
+			drawTilePos(worldPosToTilePos(currentPos), vec4(1.0,1.0,1.0,1.0));
+			// drawTilePos(vec2(0), vec4(1));
 
 
 			// get position of last thread to find the next cells to draw at
@@ -466,20 +486,20 @@ void main()
 }
 
 // functions for drawing the grass blade
-void drawGrassBlade(RandState rng, vec3 pos, float stepSize) {
+void drawGrassBlade(vec3 pos, float stepSize) {
 	atomicCounterIncrement(bladeCount);
 	
 	// Calculate a random stable normal sized cell if the cell is bigger than the normal one
 	// do this by finding a random one of the smaller cells with half the step size until the stepSize is the initial one
 	
+	ivec2 seedPos = ivec2(round(pos.xz / grassConsts.Step));
+	RandState rng = rand_init(seedPos.x, seedPos.y); 
 	float halfStep;
 	while(grassConsts.Step < stepSize) {
 		halfStep = stepSize / 2;
 		pos = pos + vec3(floor(rand_next(rng) * stepSize / halfStep) * halfStep, 0.0, floor(rand_next(rng) * stepSize / halfStep) * halfStep);
-		ivec2 seedPos = ivec2(round(pos.xz / grassConsts.Step));
+		seedPos = ivec2(round(pos.xz / grassConsts.Step));
 		rng = rand_init(seedPos.x, seedPos.y);
-		// pull one random number like it is done usually to calculate the blend for stability
-		rand_next(rng);
 
 		stepSize = halfStep;
 	}
@@ -524,7 +544,7 @@ void drawGrassBlade(RandState rng, vec3 pos, float stepSize) {
 	widthPx = round(max(distance(worldPosToImagePos(root), worldPosToImagePos(root + normalPerpRotationAxis * width)), 1.0));
 
 	// scanline rasterization
-	scanlineRasterizeGrassBlade(rootProj, cPProj, tipProj);
+	//scanlineRasterizeGrassBlade(rootProj, cPProj, tipProj);
 }
 
 void scanlineRasterizeGrassBlade(vec2 rootProj, vec2 cPProj, vec2 tipProj) {
@@ -945,6 +965,12 @@ vec3 nDCToWorldPos(vec3 ndc) {
 
 vec4 normalPointPlaneToNormalDistPlane(vec3 normal, vec3 point) {
 	return vec4(normal, dot(normal, -point));
+}
+
+// Utility
+bool epsilonEq(float arg1, float arg2) {
+	// return arg1 == arg2;
+	return (arg1 < arg2 + Epsilon) && arg1 > arg2 - Epsilon;
 }
 
 // http://www.neilmendoza.com/glsl-rotation-about-an-arbitrary-axis/

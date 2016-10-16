@@ -200,7 +200,7 @@ float drawDebugInfo = 0;
 
 int run() {
 	ogl::Platform platform(3, 3);
-	ogl::Window wnd(1024, 576, "Rise and Shine", nullptr);
+	ogl::Window wnd(1280, 720, "Rise and Shine", nullptr);
 
 	// window & rendering set up
 	wnd.makeCurrent();
@@ -568,6 +568,7 @@ int run() {
 
 			// Draw result
 			glEnable(GL_BLEND);
+			glBlendEquation(GL_FUNC_ADD);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			hdrBuffer.bind(GL_FRAMEBUFFER);
 			glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
