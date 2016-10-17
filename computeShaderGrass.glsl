@@ -90,7 +90,11 @@ Ray frustumRays[12];
 int intersectionCount = 0;
 vec3 intersections[4];
 
-// propertiies of grass blades
+// properties of grid
+float initialStepSize;
+float initialStepSizeNDC;
+
+// properties of grass blades
 vec3 normal;
 vec4 baseColor;
 
@@ -191,6 +195,12 @@ void main()
 		calcFrustumNormals();
 
 
+		// Calc initial step size
+		initialStepSizeNDC = (grassConsts.StepPxAtMinDist / camera.Resolution.x) * 2;
+		vec3 referencePos = camera.CamPos + camera.CamDir * grassConsts.MinDist;
+		initialStepSize = distance(referencePos, nDCToWorldPos(worldPosToNDC(referencePos) + vec3(1.0, 0.0, 0.0) * initialStepSizeNDC));
+
+
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
 		vec3 lineDirection = grassConsts.PerpFtBDir;
 		// If necessary mirror vector so it points roughly the right direction
@@ -206,7 +216,7 @@ void main()
 		}
 		// debug
 
-		float stepSize = grassConsts.Step;
+		float stepSize = initialStepSize;
 		float blend;
 
 		// Find minimum intersection(s) by ftb 
@@ -223,7 +233,7 @@ void main()
 		// Declare start point for iteration
 		vec3 start = intersections[index];
 
-		stepSize = grassConsts.Step; //getStepSize(1/*distPointRay(start, lineDirection, camera.CamPos)*/, blend);
+		stepSize = initialStepSize; //getStepSize(1/*distPointRay(start, lineDirection, camera.CamPos)*/, blend);
 		// Round to next cell position 
 		if(grassConsts.FtBDirection.x != 0.0 && grassConsts.FtBDirection.z != 0) {
 			// diagonal workaround
@@ -344,7 +354,7 @@ void main()
 				}
 				// drawWorldPos(lineTwoStart, vec4(0.0,0.0,1.0,1.0));
 				// drawWorldPos(start, vec4(0.0,0.0,1.0,1.0));
-				// drawWorldPos(lineStart, vec4(stepSize <= grassConsts.Step ? 1.0 : 0.0, 1.0, 0.0, 1.0));
+				// drawWorldPos(lineStart, vec4(stepSize <= initialStepSize ? 1.0 : 0.0, 1.0, 0.0, 1.0));
 
 				// Check if position is in frustum and share with other threads
 				if(!any(isinf(lineStart))) {
@@ -358,7 +368,7 @@ void main()
 					currentPos = lineStart + (localCompactId + prevThreadsInLine) * horizontalStep;
 					
 					ivec2 iPos = ivec2(round((currentPos.xz / stepSize)));
-					ivec2 seedPos = ivec2(round(currentPos.xz / grassConsts.Step));
+					ivec2 seedPos = ivec2(round(currentPos.xz / initialStepSize));
 
 
 					// Check if in frustum
@@ -367,7 +377,7 @@ void main()
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
-					// if (stepSize > grassConsts.Step) drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
+					// if (stepSize > initialStepSize) drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
 
 					// begin at MinDist
 					maskedOut = camDist < grassConsts.MinDist;
@@ -389,7 +399,7 @@ void main()
 						// decide with the position of the bigger cell if the cell will be masked out
 						vec3 relativePos = currentPos / nextStepSize;
 						vec3 nextBiggerCellPos = floor(relativePos + vec3(Epsilon)) * nextStepSize;
-						seedPos = ivec2(round(nextBiggerCellPos.xz / grassConsts.Step));
+						seedPos = ivec2(round(nextBiggerCellPos.xz / initialStepSize));
 
 						// get correct blend
 						float cornerCellStepSize = getStepSize(distance(nextBiggerCellPos, camera.CamPos), blend);
@@ -508,13 +518,13 @@ void drawGrassBlade(vec3 pos, float stepSize) {
 	// Calculate a random stable normal sized cell if the cell is bigger than the normal one
 	// do this by finding a random one of the smaller cells with half the step size until the stepSize is the initial one
 	
-	ivec2 seedPos = ivec2(round(pos.xz / grassConsts.Step));
+	ivec2 seedPos = ivec2(round(pos.xz / initialStepSize));
 	RandState rng = rand_init(seedPos.x, seedPos.y); 
 	float halfStep;
-	while(grassConsts.Step < stepSize) {
+	while(initialStepSize < stepSize) {
 		halfStep = stepSize / 2;
 		pos = pos + vec3(floor(rand_next(rng) * stepSize / halfStep) * halfStep, 0.0, floor(rand_next(rng) * stepSize / halfStep) * halfStep);
-		seedPos = ivec2(round(pos.xz / grassConsts.Step));
+		seedPos = ivec2(round(pos.xz / initialStepSize));
 		rng = rand_init(seedPos.x, seedPos.y);
 
 		stepSize = halfStep;
@@ -534,13 +544,13 @@ void drawGrassBlade(vec3 pos, float stepSize) {
 	width = grassConsts.MinWidth + rand_next(rng) * (grassConsts.MaxWidth - grassConsts.MinWidth);
 	tipLengthT = minHeight / 2 + rand_next(rng) * (1 - minHeight / 2);
 	
-	root = pos + vec3((rand_next(rng) * grassConsts.Step), 0, (rand_next(rng) * grassConsts.Step));
-	cP = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step),
+	root = pos + vec3((rand_next(rng) * initialStepSize), 0, (rand_next(rng) * initialStepSize));
+	cP = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * initialStepSize),
 		cPHeight,
-		(rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step));
-	tip = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step),
+		(rand_next(rng) * maxHorizontalControlPointDerivation * initialStepSize));
+	tip = root + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * initialStepSize),
 		tipHeight,
-		(rand_next(rng) * maxHorizontalControlPointDerivation * grassConsts.Step));
+		(rand_next(rng) * maxHorizontalControlPointDerivation * initialStepSize));
 
 	rootProj = worldPosToTilePos(root);
 	cPProj = worldPosToTilePos(cP);
@@ -733,7 +743,9 @@ float distPointRay(vec3 origin, vec3 direction, vec3 point) {
 
 // Get step size for regular grid by distance to the camera
 float getStepSize(float dist, out float blend) {
-	float factor = dist / grassConsts.StepDist; //grassConsts.StepDoubleDist;
+	vec3 referencePos = camera.CamPos + camera.CamDir * dist;
+	float fStepSize = distance(referencePos, nDCToWorldPos(worldPosToNDC(referencePos) + vec3(1.0, 0.0, 0.0) * initialStepSizeNDC));
+	float factor = fStepSize / initialStepSize;
 	
 	if(factor <= 1) {
 		blend = 0;
@@ -742,7 +754,7 @@ float getStepSize(float dist, out float blend) {
 		blend = modf(log2(factor), factor);
 		factor = pow(2, factor);
 	}
-	return factor * grassConsts.Step;
+	return factor * initialStepSize;
 }
 
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir) {

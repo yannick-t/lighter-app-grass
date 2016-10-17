@@ -37,15 +37,13 @@ struct CSGrassConstants
 	vec3 FtBDirection;
 	int TileDivisor;
 	vec3 PerpFtBDir;
-	float Step;
 	float MinHeight;
 	float MaxHeight;
 	float RelAODist;
 	float MinWidth;
 	float MaxWidth;
 	float MinDist;
-	// Distance at which the regular grid has to doubke the step size
-	float StepDist;
+	float StepPxAtMinDist;
 	int DrawDebugInfo; // levels of debug info
 };
 
