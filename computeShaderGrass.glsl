@@ -94,6 +94,8 @@ vec3 intersections[4];
 vec3 normal;
 vec4 baseColor;
 
+float aoDist;
+
 float width;
 float widthPx;
 float tipLengthT;
@@ -140,9 +142,17 @@ void main()
 	vec3 planeNormal = vec3(0.0, 1.0, 0.0);
 
 	calcFrustumIntersections(planePoint, planeNormal);
+
+	// only draw tiles containing grass blades further than the min dist
+	bool draw = false;
+	for(int i = 0; i < intersectionCount; i++) {
+		draw = draw || distance(intersections[i], camera.CamPos) > grassConsts.MinDist;
+	}
+
+	draw = draw && intersectionCount > 3;
 	
 	
-	if(intersectionCount > 3 /*&& (gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 6 || gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 19)*/) {
+	if(draw /*&& (gl_WorkGroupID.x == 4 && gl_WorkGroupID.y == 6 || gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 19)*/) {
 	
 		
 		// expand frustum to contain grass blades where the cell isn't in the frustum but the top part of the blade can be
@@ -352,16 +362,22 @@ void main()
 
 
 					// Check if in frustum
-					localStepSize = getStepSize(distance(currentPos, camera.CamPos), blend);
+					float camDist = distance(currentPos, camera.CamPos);
+					localStepSize = getStepSize(camDist, blend);
 					outOfFrustum = gridCellOutsideFrustum(currentPos, stepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
 					// if (stepSize > grassConsts.Step) drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
 
-					
+					// begin at MinDist
+					maskedOut = camDist < grassConsts.MinDist;
+
+
 					// mask out cells if the stepSize used is too small for the cell
-					maskedOut = localStepSize > stepSize;
-					maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
+					if(!maskedOut) {
+						maskedOut = localStepSize > stepSize;
+						maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
+					}
 
 					
 					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
@@ -442,18 +458,18 @@ void main()
 
 			// found position -> draw
 			
-			vec3 quad[4] = {currentPos, currentPos + vec3(0.0, 0.0, localStepSize), currentPos + vec3(localStepSize, 0.0, localStepSize),
-					currentPos + vec3(localStepSize, 0.0, 0.0)};
-			for(int l = 0; l < 4; l++) {
+			//vec3 quad[4] = {currentPos, currentPos + vec3(0.0, 0.0, localStepSize), currentPos + vec3(localStepSize, 0.0, localStepSize),
+					//currentPos + vec3(localStepSize, 0.0, 0.0)};
+			//for(int l = 0; l < 4; l++) {
 				// drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 				// drawWorldLine(quad[l], quad[(l + 1) % 4], vec4(1.0, 1.0, 1.0, 1.0));
-			}
+			//}
 			// drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 			// drawWorldPos(currentPos + vec3(rand_next(rng) * localStepSize, 0.0, rand_next(rng) * localStepSize) , vec4(1.0, 1.0, 1.0, 1.0));
 			// drawWorldPos(currentPos, vec4(0.9, 0.9, 0.8, 1.0));
 			// drawWorldPos(currentPos, vec4(alpha, alpha, alpha, 1));
 			drawGrassBlade(currentPos, localStepSize);
-			drawTilePos(worldPosToTilePos(currentPos), vec4(0.1,0.2,0.3,0.9));
+			// drawTilePos(worldPosToTilePos(currentPos), vec4(0.1,0.2,0.3,0.9));
 			// drawTilePos(vec2(0), vec4(1));
 
 
@@ -513,6 +529,8 @@ void drawGrassBlade(vec3 pos, float stepSize) {
 	float cPHeight = minHeight + rand_next(rng) * (maxHeight - minHeight);
 	float tipHeight = cPHeight + rand_next(rng) * (maxHeight - cPHeight);
 
+	aoDist = grassConsts.RelAODist * tipHeight;
+
 	width = grassConsts.MinWidth + rand_next(rng) * (grassConsts.MaxWidth - grassConsts.MinWidth);
 	tipLengthT = minHeight / 2 + rand_next(rng) * (1 - minHeight / 2);
 	
@@ -541,10 +559,10 @@ void drawGrassBlade(vec3 pos, float stepSize) {
 	normal = normalize(cP - (root + tip) / 2);
 	vec3 normalPerpRotationAxis = normalize(cross(root - cP, tip - cP));
 	normalPerpRotation = rotationMatrix(cross(root - cP, tip - cP), 3 / 2 * PI);
-	widthPx = round(max(distance(worldPosToImagePos(root), worldPosToImagePos(root + normalPerpRotationAxis * width)), 1.0));
+	widthPx = round(distance(worldPosToImagePos(root), worldPosToImagePos(root + normalPerpRotationAxis * width)));
 
 	// scanline rasterization
-	//scanlineRasterizeGrassBlade(rootProj, cPProj, tipProj);
+	scanlineRasterizeGrassBlade(rootProj, cPProj, tipProj);
 }
 
 void scanlineRasterizeGrassBlade(vec2 rootProj, vec2 cPProj, vec2 tipProj) {
@@ -627,7 +645,8 @@ bool drawGrassBladePixelBlend(int x, int y, vec4 color) {
 
 	float srcAlpha = pixels[x][y].a;
 	if(srcAlpha < 1.0) {
-		pixels[x][y] = srcAlpha * pixels[x][y] + (1 - srcAlpha) * color;
+		pixels[x][y].a = srcAlpha + color.a * (1 - srcAlpha);
+		pixels[x][y].rgb = (srcAlpha * pixels[x][y].rgb + (1 - srcAlpha) * color.a * color.rgb) / pixels[x][y].a;
 		//pixels[x][y] = color;
 		return true;
 	} else {
@@ -641,7 +660,6 @@ vec4 getGrassBladeShading(vec3 pos, vec3 n) {
 	vec4 color = baseColor;
 
 	// fake AO (darker the closer to the ground, curve starts at the bottom)
-	float aoDist = grassConsts.MinHeight; // Todo
 	float aoFactor = clamp(distance(pos, vec3(pos.x, 0.0, pos.z)) / aoDist, 0.2, 1.0);
 
 	// Shading
@@ -657,13 +675,13 @@ vec4 getGrassBladeShading(vec3 pos, vec3 n) {
 		float specAngle = max(dot(halfDir, n), 0.0);
 		specular = pow(specAngle, shininess);
 
-		color = lambertian * mix(baseColor, light.Color, 0.2) + specular * light.Color;
+		color.rgb = lambertian * mix(baseColor.rgb, light.Color.rgb, 0.2) + specular * light.Color.rgb;
 	} else {
 		// back lighting - less bright
-		color = ((- lambertian) / 2) * mix(baseColor, light.Color, 0.3);
+		color.rgb = ((- lambertian) / 2) * mix(baseColor.rgb, light.Color.rgb, 0.3);
 	}
 	
-	color = vec4(aoFactor * color.rgb, color.a);
+	color.rgb *= aoFactor;
 
 	return color;
 	

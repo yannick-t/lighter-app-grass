@@ -40,9 +40,11 @@ struct CSGrassConstants
 	float Step;
 	float MinHeight;
 	float MaxHeight;
+	float RelAODist;
 	float MinWidth;
 	float MaxWidth;
-	// Distance at ehich the regular grid has the siye step
+	float MinDist;
+	// Distance at which the regular grid has to doubke the step size
 	float StepDist;
 	int DrawDebugInfo; // levels of debug info
 };
