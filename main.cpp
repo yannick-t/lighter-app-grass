@@ -374,7 +374,7 @@ int run() {
 			ui.addSlider(&csGrassMinWidth, "grass blade min width", csGrassMinWidth, csGrassMaxHeight / 4, csGrassMinWidth, 0.1f);
 			ui.addSlider(&csGrassMaxWidth, "grass blade max width", csGrassMaxWidth, csGrassMaxHeight / 4, csGrassMaxWidth, 0.1f);
 			ui.addSlider(&csGrassStepPxAtMinDist, "grid size at minimal distance in pixels", csGrassStepPxAtMinDist, 100.0f, csGrassStepPxAtMinDist, 0.1f);
-			ui.addSlider(&csGrassMinDist, "distance to begin drawing grass", csGrassMinDist, 1000.0f, csGrassMinDist, 0.1f);
+			ui.addSlider(&csGrassMinDist, "distance to begin drawing grass", csGrassMinDist, 100.0f, csGrassMinDist, 0.1f);
 			ui.addSlider(&drawDebugInfo, "level of debug info", drawDebugInfo, 10.0f, drawDebugInfo, 1.0f);
 			//			if (auto uiUnion = ui::Union(ui)) 
 			{
@@ -712,7 +712,7 @@ int run() {
 			// std::cout << "Frame time: " << 1000.0f * smoothFDt << " ms; " << 1.0f / smoothFDt << " FPS" << std::endl;
 		}
 
-		Sleep(12);
+		// Sleep(12);
 	}
 
 	return 0;

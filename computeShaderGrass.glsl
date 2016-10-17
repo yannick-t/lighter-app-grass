@@ -378,7 +378,7 @@ void main()
 
 					
 					// if (stepSize > initialStepSize) drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
-
+					
 					// begin at MinDist
 					maskedOut = camDist < grassConsts.MinDist;
 
@@ -479,8 +479,13 @@ void main()
 			// drawWorldPos(currentPos, vec4(0.9, 0.9, 0.8, 1.0));
 			// drawWorldPos(currentPos, vec4(alpha, alpha, alpha, 1));
 			drawGrassBlade(currentPos, localStepSize);
-			// drawTilePos(worldPosToTilePos(currentPos), vec4(0.1,0.2,0.3,0.9));
-			// drawTilePos(vec2(0), vec4(1));
+			// vec4 c = vec4(0.0,0.1,0.2,1);
+			//drawTilePos(worldPosToTilePos(currentPos), c);
+			// drawTilePos(worldPosToTilePos(currentPos) + vec2(1, 0), c);
+			// drawTilePos(worldPosToTilePos(currentPos) + vec2(0, 1), c);
+			// drawTilePos(worldPosToTilePos(currentPos) + vec2(1, 1), c);
+			// drawTilePos(vec2(0), vec4(0, 0, 0, 1));
+			// drawTilePos(vec2(31), vec4(0, 0, 0, 1));
 
 
 			// get position of last thread to find the next cells to draw at
@@ -617,7 +622,7 @@ bool drawGrassBladePixel(float y, float t) {
 	vec3 tangent = 2 * (-2 * cP * t + cP + root * (t - 1) + t * tip);
 	vec3 n = normalize((normalPerpRotation * vec4(tangent, 1.0)).xyz);
 
-	if (x < 0 || x > 31) {
+	if (x < 0 || x >= 32) {
 		return true;
 	}
 
@@ -629,8 +634,8 @@ bool drawGrassBladePixel(float y, float t) {
 	int iy = int(y);
 	int xStart = int(max(x, 0));
 	float widthScaling = 1 - ((t - (1 - tipLengthT)) / tipLengthT);
-	x = widthScaling > 1 ? x + widthPx : x + widthScaling * widthPx; 
-	int xEnd = int(min(x + widthPx, 31));
+	float fxEnd = widthScaling > 1 ? x + widthPx : x + widthScaling * widthPx; 
+	int xEnd = int(min(fxEnd, 31));
 
 	bool continueDrawing = false;
 	for(ix = xStart; ix <= xEnd; ix++) {
@@ -652,6 +657,9 @@ bool drawGrassBladePixel(float y, float t) {
 }
 
 bool drawGrassBladePixelBlend(int x, int y, vec4 color) {
+	//imageStore(result, tileCorner + ivec2(x,y), color);
+	//pixels[x][y] = color;
+	//return true;
 
 	float srcAlpha = pixels[x][y].a;
 	if(srcAlpha < 1.0) {
