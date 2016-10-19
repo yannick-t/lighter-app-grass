@@ -8,7 +8,7 @@
 #define PI 3.1415926535897932384626433832795
 
 const float Epsilon = 0.001;
-const float shininess = 16.0; // Todo: maybe randomize
+const float shininess = 32.0; // Todo: maybe randomize
 
 shared vec3 lastPosition;
 
@@ -21,12 +21,15 @@ vec4 getGrassBladeShading(vec3 pos, vec3 normal);
 
 void scanlineRasterizeGrassBlade(vec2 rootProj, vec2 cPProj, vec2 tipProj);
 
+void calcWindTranslation(RandState rng);
+
 vec3[6] calcFrustumNormals();
 Ray[12] calcFrustumRays();
 vec3[4] calcFrustumIntersections(vec3 planePoint, vec3 planeNormal, out int intersectionCount);
 
 float getStepSize(float dist, out float blend);
 float distPointRay(vec3 origin, vec3 direction, vec3 point);
+float distPointLineSegment(vec3 v, vec3 w, vec3 p);
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir);
 vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize);
 vec3 floorGridPointByDirOffset(vec3 point, vec3 dir, float stepSize, vec2 gridOffset);
@@ -158,10 +161,12 @@ void main()
 		draw = draw || distance(frustumIntersections[i], camera.CamPos) > grassConsts.MinDist;
 	}
 
-	draw = draw && frustumIntersectionCount > 3;
+	draw = /*draw && */frustumIntersectionCount > 3;
 	
 	
 	if(draw /*&& (gl_WorkGroupID.x == 38 && gl_WorkGroupID.y == 12 ||gl_WorkGroupID.x == 39 && gl_WorkGroupID.y == 12)*/) {
+
+		//drawGrassBlade(vec3(0), initialStepSize);
 		
 		// expand frustum to contain grass blades where the cell isn't in the frustum but a part of the blade can be
 		// Calculate intersections with the plane of max grass height
@@ -227,11 +232,11 @@ void main()
 		}
 
 
-
 		// Declare start point for iteration
 		vec3 start = frustumIntersections[index];
 
-		stepSize = getStepSize(distance(start, camera.CamPos), blend);
+		// stepSize = getStepSize(distance(start, camera.CamPos), blend);
+		stepSize = getStepSize(distPointRay(start, lineDirection, camera.CamPos), blend);
 		// Round to next cell position 
 		if(!epsilonEq(grassConsts.FtBDirection.x, 0.0) && !epsilonEq(grassConsts.FtBDirection.z, 0.0)) {
 			// diagonal workaround
@@ -263,7 +268,7 @@ void main()
 
 		// Iterate through cells
 		int i = 0;
-		int maxIt = 1000;
+		int maxIt = 500;
 		int searchIt;
 		int maxItPerSearch = 32;
 		int invalidIntersectionSteps = 0;
@@ -302,7 +307,8 @@ void main()
 			prevThreadsInLine = 0;
 			lineNumber = 0;
 			searchIt = 0;
-			stepSize = getStepSize(distance(lineOneStart, camera.CamPos), blend);
+			stepSize = getStepSize(distPointRay(lineOneStart, lineDirection, camera.CamPos), blend);
+			// stepSize = getStepSize(distance(lineOneStart, camera.CamPos), blend);
 
 			while(searching) {
 				alpha = 1.0;
@@ -330,19 +336,20 @@ void main()
 						}
 					} while(any(isinf(lT))); // search for a valid intersection
 					lT = lT - (invalidIntersectionSteps - 1) * ftbStep;
-					stepSizeLT = getStepSize(distance(lT, camera.CamPos), blend);
+					//stepSizeLT = getStepSize(distance(lT, camera.CamPos), blend);
+					stepSizeLT = getStepSize(distPointRay(lT, lineDirection, camera.CamPos), blend);
 					lineTwoStart = floorGridPointByDir(lT, lineDirection, stepSizeLT);
 					
 					
 					if(newLine) {
-						if(lessThanByDir(lT, lineOneStart, horizontalStep)) {
-							lineStart = floorGridPointByDir(lT - intersectionStep, lineDirection, stepSize);
-						} else {
-							lineStart = lineOneStart;
+						if(lessThanByDir(lineTwoStart, lineOneStart, horizontalStep)) {
+							lineOneStart = floorGridPointByDir(lineTwoStart - intersectionStep, lineDirection, stepSize);
+						} else if(lessThanByDir(lineOneStart, lineTwoStart, horizontalStep)) {
+							lineTwoStart = floorGridPointByDir(lineOneStart + intersectionStep, lineDirection, stepSize);
 						}
-					} else {
-						lineStart = lineOneStart;
 					}
+					lineStart = lineOneStart;
+					
 					
 					//drawTilePos(worldPosToTilePos(lineStart) + vec2(10, 0), vec4(1.0, 0.0, 1.0, 1.0));
 
@@ -382,11 +389,11 @@ void main()
 
 					// mask out cells if the stepSize used is too small for the cell
 					if(!maskedOut) {
-						// maskedOut = localStepSize > stepSize;
+						maskedOut = localStepSize > stepSize;
 						maskedOut = maskedOut && ((iPos.x | iPos.y) & (int(round(localStepSize / stepSize) - 1))) != 0;
 					}
 
-					/*
+					
 					// create blend between cells of different stepSizes by masking points out depending on how far they are from their optimal step size 
 					if(!maskedOut) {
 						// work with next bigger step size 
@@ -417,7 +424,7 @@ void main()
 							// alpha = (rand - blend) / (1 - blend); // Calculate an alpha value representing how close a cell is to being masked out
 						}
 						
-					}*/
+					}
 					
 				} else {
 					outOfFrustum = true;
@@ -475,9 +482,10 @@ void main()
 			// drawWorldPos(currentPos + vec3(rand_next(rng) * localStepSize, 0.0, rand_next(rng) * localStepSize) , vec4(1.0, 1.0, 1.0, 1.0));
 			//drawWorldPos(vec3(currentPos.x + stepSize, 0, currentPos.z + stepSize), vec4(0.9, 0.9, 0.8, 1.0));
 			// drawWorldPos(currentPos, vec4(alpha, alpha, alpha, 1));
-			// drawGrassBlade(currentPos, localStepSize);
-			vec4 c = vec4(0.0,0.1,0.2,1);
-			drawTilePos(worldPosToTilePos(vec3(currentPos.x + stepSize, 0, currentPos.z + stepSize)), c);
+			drawGrassBlade(currentPos, localStepSize);
+			// vec4 c = vec4(0.0,0.1,0.2,1);
+			// drawTilePos(worldPosToTilePos(vec3(currentPos.x + stepSize, 0, currentPos.z + stepSize)), c);
+			// drawTilePos(worldPosToTilePos(vec3(currentPos.x + 0.01 * stepSize, 0, currentPos.z + 0.01 * stepSize)), vec4(1,1,0,1));
 			// drawTilePos(worldPosToTilePos(vec3(currentPos.x, 0, currentPos.z)), c);
 			// drawTilePos(worldPosToTilePos(currentPos) + vec2(1, 0), c);
 			// drawTilePos(worldPosToTilePos(currentPos) + vec2(0, 1), c);
@@ -522,7 +530,7 @@ void drawGrassBlade(vec3 pos, float stepSize) {
 	// do this by finding a random one of the smaller cells with half the step size until the stepSize is the initial one
 	
 	ivec2 seedPos = ivec2(round(pos.xz / initialStepSize));
-	RandState rng = rand_init(seedPos.x, seedPos.y); 
+	RandState rng = rand_init(seedPos.x + 143, seedPos.y + 5); 
 	float halfStep;
 	while(initialStepSize < stepSize) {
 		halfStep = stepSize / 2;
@@ -535,17 +543,17 @@ void drawGrassBlade(vec3 pos, float stepSize) {
 
 	float minHeight = grassConsts.MinHeight;
 	float maxHeight = grassConsts.MaxHeight;
-	float maxHorizontalControlPointDerivation = 0.7;
-	float maxHorizontalTipDerivation = 0.7;
+	float maxHorizontalControlPointDerivation = 1;
+	float maxHorizontalTipDerivation = 1;
 
 	// Random generation of grass blade properties
-	float cPHeight = minHeight + rand_next(rng) * (maxHeight - minHeight);
+	float cPHeight = (minHeight + rand_next(rng) * (maxHeight - minHeight));
 	float tipHeight = cPHeight + rand_next(rng) * (maxHeight - cPHeight);
 
 	aoDist = grassConsts.RelAODist * tipHeight;
 
 	width = grassConsts.MinWidth + rand_next(rng) * (grassConsts.MaxWidth - grassConsts.MinWidth);
-	tipLengthT = minHeight / 2 + rand_next(rng) * (1 - minHeight / 2);
+	tipLengthT = 0.4 + rand_next(rng) * (1 - 0.4);
 	
 	root = pos + vec3((rand_next(rng) * initialStepSize), 0, (rand_next(rng) * initialStepSize));
 	cP = pos + vec3((rand_next(rng) * maxHorizontalControlPointDerivation * initialStepSize),
@@ -555,16 +563,19 @@ void drawGrassBlade(vec3 pos, float stepSize) {
 		tipHeight,
 		(rand_next(rng) * maxHorizontalControlPointDerivation * initialStepSize));
 
+	calcWindTranslation(rng);
+
 	rootProj = worldPosToTilePos(root);
 	cPProj = worldPosToTilePos(cP);
 	tipProj = worldPosToTilePos(tip);
 	
+
+	//drawTilePos(rootProj, vec4(0.5,0.25,0.2,1.0));
+	//drawTilePos(cPProj, vec4(0.85,0.5,0.0,1.0));
+	//drawTilePos(tipProj, vec4(0.3,0.85,0.0,1.0));
 	// drawWorldPos(root, vec4(1.0,1.0,1.0,1.0));
-	// drawTilePos(rootProj, vec4(0.0,0.0,0.0,1.0));
 	//drawImageLine(rootProj, cPProj, vec4(0.5,0.5,0.5,1.0));
-	// drawTilePos(ivec2(cPProj), vec4(1.0,1.0,1.0,1.0));
 	//drawImageLine(cPProj, tipProj, vec4(0.5,0.5,0.5,1.0));
-	// drawTilePos(ivec2(tipProj), vec4(1.0,1.0,1.0,1.0));
 	
 	// Generate random color
 	baseColor = vec4(rand_next(rng) * 0.2, rand_next(rng) * 1.0, rand_next(rng) * 0.1, 1.0);
@@ -575,7 +586,7 @@ void drawGrassBlade(vec3 pos, float stepSize) {
 	widthPx = round(distance(worldPosToImagePos(root), worldPosToImagePos(root + normalPerpRotationAxis * width)));
 
 	// scanline rasterization
-	//scanlineRasterizeGrassBlade(rootProj, cPProj, tipProj);
+	scanlineRasterizeGrassBlade(rootProj, cPProj, tipProj);
 }
 
 void scanlineRasterizeGrassBlade(vec2 rootProj, vec2 cPProj, vec2 tipProj) {
@@ -640,16 +651,27 @@ bool drawGrassBladePixel(float y, float t) {
 		continueDrawing = drawGrassBladePixelBlend(ix, iy, color) || continueDrawing;
 	}
 
-	// Antialiasing
+	// Antialiasing - in +x and -x because of the width scaling it can be different
 	float b = modf(x, x);
-	int aaPixel = (b < 0.5 ? xStart - 1 : ix);
-	b = abs((b - 0.5) * 2);
+	int aaPixel = xStart - 1;
+	if(b < 0.5) {
+		b = abs((b - 0.5) * 2);
 
-	if(aaPixel < 0 || aaPixel > 31) {
-		return true;
+		color.a = b;
+		if(aaPixel >= 0 || aaPixel <= 31) {
+			continueDrawing = drawGrassBladePixelBlend(aaPixel, iy, color) || continueDrawing;
+		}
 	}
-	// color.a = b;
-	continueDrawing = drawGrassBladePixelBlend(aaPixel, iy, b * color) || continueDrawing;
+	b = modf(fxEnd, x);
+	aaPixel = ix;
+	if(b > 0.5) {
+		b = abs((b - 0.5) * 2);
+		
+		color.a = b;
+		if(aaPixel >= 0 || aaPixel <= 31) {
+			continueDrawing = drawGrassBladePixelBlend(aaPixel, iy, color) || continueDrawing;
+		}
+	}
 
 	return continueDrawing;
 }
@@ -684,12 +706,12 @@ vec4 getGrassBladeShading(vec3 pos, vec3 n) {
 		n = -n;
 	}
 
-	float lambertian = -dot(n, light.Direction);
+	float lambertian = dot(n, -light.Direction);
 	float specular = 0.0;
-	if(lambertian >= 0) {
+	if(lambertian > 0) {
 		vec3 halfDir = normalize(-light.Direction - camera.CamDir);
 		float specAngle = max(dot(halfDir, n), 0.0);
-		specular = pow(specAngle, shininess);
+		specular = 0.3 * pow(specAngle, shininess);
 
 		color.rgb = lambertian * mix(baseColor.rgb, light.Color.rgb, 0.2) + specular * light.Color.rgb;
 	} else {
@@ -701,6 +723,22 @@ vec4 getGrassBladeShading(vec3 pos, vec3 n) {
 
 	return color;
 	
+}
+
+// Calculate the translation of the characterizing points of the grass blade
+void calcWindTranslation(RandState rng) {
+	// vary direction a bit
+	vec3 randDirVar = vec3(0.8) + vec3(rand_next(rng), rand_next(rng), rand_next(rng)) * vec3(1 - 0.8);
+	vec3 dir = randDirVar * grassConsts.WindDirection;
+
+	// vary windspeed a bit over time
+	float speedVar = grassConsts.WindSpeed + (0.01 * rand_next(rng) * (sin(grassConsts.TimeStamp)));
+
+	// translation
+	float translationFactor = 0.01 * speedVar * (sin(grassConsts.TimeStamp * grassConsts.WindSpeed + rand_next(rng)) + 0.8);
+
+	tip = tip + translationFactor * dir;
+	cP = cP + 0.8 * (translationFactor * dir);
 }
 
 // Functions to calculate the frustum
@@ -756,6 +794,15 @@ float distPointRay(vec3 origin, vec3 direction, vec3 point) {
 	return length(cross(normalize(direction), point - origin));
 }
 
+
+float distPointLineSegment(vec3 v, vec3 w, vec3 p) {
+  const float l2 = pow(distance(v, w), 2);
+  if (l2 == 0.0) return distance(p, v); 
+  const float t = max(0, min(1, dot(p - v, w - v) / l2));
+  const vec3 projection = v + t * (w - v); 
+  return distance(p, projection);
+}
+
 // Get step size for regular grid by distance to the camera
 float getStepSize(float dist, out float blend) {
 	vec3 referencePos = camera.CamPos + camera.CamDir * dist;
@@ -774,9 +821,7 @@ float getStepSize(float dist, out float blend) {
 
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir) {
 	bool result = false;
-	if(any(isinf(fst)) || any(isinf(snd))) {
-		result = false;
-	} else {
+	if(!any(isinf(fst)) && !any(isinf(snd))) {
 		if(dot(snd - fst, dir) > 0) {
 			result = true;
 		} 
@@ -854,7 +899,7 @@ vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6],
 			inFrustum = true;
 			int dontCheck = i + ((i % 2 == 1) ? -1 : 1);// plane index opposite of current plane
 			for(int j = 0; j < 6; j++) {
-				if(j == i || j == dontCheck) {
+				if(j == i || !whichPlanes[j] || j == dontCheck) {
 					continue;
 				}
 

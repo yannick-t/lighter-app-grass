@@ -199,6 +199,10 @@ float csGrassMinDist = 25;
 float csGrassStepPxAtMinDist = 10;
 float drawDebugInfo = 0;
 
+glm::vec3 csGrassWindDirection = glm::vec3(1, 0, 0);
+float csGrassWindDirectionDegrees = 0;
+float csGrassWindSpeed = 0;
+
 int run() {
 	ogl::Platform platform(3, 3);
 	ogl::Window wnd(1280, 720, "Rise and Shine", nullptr);
@@ -376,6 +380,9 @@ int run() {
 			ui.addSlider(&csGrassStepPxAtMinDist, "grid size at minimal distance in pixels", csGrassStepPxAtMinDist, 100.0f, csGrassStepPxAtMinDist, 0.1f);
 			ui.addSlider(&csGrassMinDist, "distance to begin drawing grass", csGrassMinDist, 100.0f, csGrassMinDist, 0.1f);
 			ui.addSlider(&drawDebugInfo, "level of debug info", drawDebugInfo, 10.0f, drawDebugInfo, 1.0f);
+
+			ui.addSlider(&csGrassWindDirectionDegrees, "wind direction", csGrassWindDirectionDegrees, 359.0f, csGrassWindDirectionDegrees, 1.0f);
+			ui.addSlider(&csGrassWindSpeed, "wind speed", csGrassWindSpeed, 2.0f, csGrassWindSpeed, 1.0f);
 			//			if (auto uiUnion = ui::Union(ui)) 
 			{
 				// ui.addButton(3, "test button", nullptr);
@@ -424,9 +431,10 @@ int run() {
 
 		// frame times
 		float dt;
+		double thisTime;
 		bool nextSecond;
 		bool halfSecond; {
-			double thisTime = glfwGetTime();
+			thisTime = glfwGetTime();
 			dt = (float) (thisTime - lastTime);
 			nextSecond = (long long) thisTime > (long long) lastTime;
 			halfSecond = thisTime - floor(thisTime) >= 0.5f;
@@ -564,6 +572,11 @@ int run() {
 			csGrassConstants.StepPxAtMinDist = csGrassStepPxAtMinDist;
 			csGrassConstants.TileDivisor = tileDivisor;
 			csGrassConstants.DrawDebugInfo = (int)drawDebugInfo;
+
+			csGrassConstants.TimeStamp = (float)thisTime;
+			csGrassWindDirection = glm::vec3(glm::rotate((float)(csGrassWindDirectionDegrees / 180 * M_PI), glm::vec3(0, 1, 0)) * glm::vec4(1, 0, 0, 1));
+			csGrassConstants.WindDirection = csGrassWindDirection;
+			csGrassConstants.WindSpeed = csGrassWindSpeed;
 			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
 
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
