@@ -195,13 +195,14 @@ float csGrassMaxHeight = 0.16;
 float csGrassRelAODist = 0.4;
 float csGrassMinWidth = 0.0001;
 float csGrassMaxWidth = 0.001;
-float csGrassMinDist = 25;
-float csGrassStepPxAtMinDist = 10;
+float csGrassMinDist = 3;
+float csGrassMaxDist = 30;
+float csGrassStepPxAtMinDist = 5;
 float drawDebugInfo = 0;
 
 glm::vec3 csGrassWindDirection = glm::vec3(1, 0, 0);
 float csGrassWindDirectionDegrees = 0;
-float csGrassWindSpeed = 0;
+float csGrassWindSpeed = 1.5;
 
 int run() {
 	ogl::Platform platform(3, 3);
@@ -243,8 +244,8 @@ int run() {
 	shaders.push_back(&computeShaderGrass);
 	ogl::ProgramWithTime csResultShader("data/csResultShader.glsl");
 	shaders.push_back(&csResultShader);
-	ogl::ProgramWithTime debugShader("data/debug.glsl");
-	shaders.push_back(&debugShader);
+	ogl::ProgramWithTime groundShader("data/groundShader.glsl");
+	shaders.push_back(&groundShader);
 	ogl::ProgramWithTime textShader("data/text.glsl", "", ogl::ProgramWithTime::HasGS);
 	shaders.push_back(&textShader);
 	ogl::ProgramWithTime uiShader("data/ui.glsl", "", ogl::ProgramWithTime::HasGS);
@@ -379,10 +380,10 @@ int run() {
 			ui.addSlider(&csGrassMaxWidth, "grass blade max width", csGrassMaxWidth, csGrassMaxHeight / 4, csGrassMaxWidth, 0.1f);
 			ui.addSlider(&csGrassStepPxAtMinDist, "grid size at minimal distance in pixels", csGrassStepPxAtMinDist, 100.0f, csGrassStepPxAtMinDist, 0.1f);
 			ui.addSlider(&csGrassMinDist, "distance to begin drawing grass", csGrassMinDist, 100.0f, csGrassMinDist, 0.1f);
-			ui.addSlider(&drawDebugInfo, "level of debug info", drawDebugInfo, 10.0f, drawDebugInfo, 1.0f);
-
+			ui.addSlider(&csGrassMaxDist, "distance to stop drawing grass", csGrassMaxDist, 1000.0f, csGrassMaxDist, 0.1f);
 			ui.addSlider(&csGrassWindDirectionDegrees, "wind direction", csGrassWindDirectionDegrees, 359.0f, csGrassWindDirectionDegrees, 1.0f);
 			ui.addSlider(&csGrassWindSpeed, "wind speed", csGrassWindSpeed, 2.0f, csGrassWindSpeed, 1.0f);
+			ui.addSlider(&drawDebugInfo, "level of debug info", drawDebugInfo, 10.0f, drawDebugInfo, 1.0f);
 			//			if (auto uiUnion = ui::Union(ui)) 
 			{
 				// ui.addButton(3, "test button", nullptr);
@@ -390,6 +391,7 @@ int run() {
 			}
 		}
 	};
+
 
 	// Load default preset
 	auto defaultIniFile = "default.ini";
@@ -529,6 +531,19 @@ int run() {
 			nullVertexArrays.bind();
 			backgroundShader.bind();
 			glDrawArrays(GL_TRIANGLES, 0, 3);
+		}
+
+		
+		// Ground
+		{
+			hdrBuffer.bind(GL_FRAMEBUFFER);
+
+			glEnable(GL_DEPTH_TEST);
+			camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
+			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
+			nullVertexArrays.bind();
+			groundShader.bind();
+			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		}
 
 

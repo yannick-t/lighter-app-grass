@@ -21,11 +21,9 @@ set(APPLICATION_SYSTEM_SRC
 set(APPLICATION_SHADER_SRC
   background.glsl
   tonemap.glsl
-  phong.glsl
-  referenceGeometryGrass.glsl
   computeShaderGrass.glsl
   csResultShader.glsl
-  debug.glsl
+  groundShader.glsl
   )
 set(APPLICATION_CODE
   main.cpp
