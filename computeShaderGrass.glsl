@@ -8,7 +8,7 @@
 #define PI 3.1415926535897932384626433832795
 
 const float Epsilon = 0.001;
-const float shininess = 8.0; // Todo: maybe randomize
+const float shininess = 4.0; // Todo: maybe randomize
 
 shared vec3 lastPosition;
 
@@ -726,10 +726,10 @@ vec4 getGrassBladeShading(vec3 pos, vec3 n) {
 		float specAngle = max(dot(halfDir, n), 0.0);
 		specular = 0.1 * pow(specAngle, shininess);
 
-		color.rgb = 0.8 * lambertian * mix(baseColor.rgb, light.Color.rgb, lambertian / 6) + specular * light.Color.rgb;
+		color.rgb = 0.8 * lambertian * light.Color.rgb * baseColor.rgb + specular * light.Color.rgb;
 	} else {
 		// back lighting - less bright
-		color.rgb = ((- lambertian) / 3) * mix(baseColor.rgb, light.Color.rgb, lambertian / 2);
+		color.rgb = ((- lambertian) / 3) * mix(baseColor.rgb, light.Color.rgb, - lambertian / 2);
 	}
 	
 	color.rgb *= aoFactor;
