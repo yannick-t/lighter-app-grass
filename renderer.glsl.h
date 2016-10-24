@@ -36,19 +36,24 @@ struct CSGrassConstants
 {
 	vec3 FtBDirection;
 	int TileDivisor;
+
 	vec3 PerpFtBDir;
 	float MinHeight;
+
 	float MaxHeight;
 	float RelAODist;
 	float MinWidth;
 	float MaxWidth;
+
 	float MinDist;
+	float MaxDist;
 	float StepPxAtMinDist;
 	int DrawDebugInfo; // levels of debug info
 
-	float TimeStamp;
 	vec3 WindDirection;
 	float WindSpeed;
+
+	float TimeStamp;
 };
 
 struct Ray

@@ -31,7 +31,9 @@ float getStepSize(float dist, out float blend);
 float distPointRay(vec3 origin, vec3 direction, vec3 point);
 float distPointLineSegment(vec3 v, vec3 w, vec3 p);
 bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir);
+vec3 floorToGridPointAlongRay(Ray ray, float stepSize, vec3 pointOnRay);
 vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize);
+vec3 floorGridPointByDirEpsilon(vec3 point, vec3 dir, vec3 sndDir, float stepSize);
 vec3 floorGridPointByDirOffset(vec3 point, vec3 dir, float stepSize, vec2 gridOffset);
 
 bool[6] negate(bool array[6]);
@@ -158,13 +160,14 @@ void main()
 	// only draw tiles containing grass blades further than the min dist
 	bool draw = false;
 	for(int i = 0; i < frustumIntersectionCount; i++) {
-		draw = draw || distance(frustumIntersections[i], camera.CamPos) > grassConsts.MinDist;
+		float d = distance(frustumIntersections[i], camera.CamPos);
+		draw = draw || d > grassConsts.MinDist || d < grassConsts.MinDist;
 	}
 
 	draw = draw && frustumIntersectionCount > 3;
 	
 	
-	if(draw /*&& (gl_WorkGroupID.x == 3 && gl_WorkGroupID.y == 10 ||gl_WorkGroupID.x == 1 && gl_WorkGroupID.y == 12)*/) {
+	if(draw && (gl_WorkGroupID.x == 6 && gl_WorkGroupID.y == 15 /*|| gl_WorkGroupID.x == 17 && gl_WorkGroupID.y == 20*/ || grassConsts.DrawDebugInfo < 1)) {
 
 		
 		
@@ -202,6 +205,13 @@ void main()
 		frustumRays = calcFrustumRays();
 		frustumIntersections = calcFrustumIntersections(planePoint, planeNormal, frustumIntersectionCount);
 		frustumPlaneNormals = calcFrustumNormals();
+
+		if(grassConsts.DrawDebugInfo >= 1.0) {
+			// debug - draw frustum intersections
+			for(int i = 0; i < frustumIntersectionCount; i++) {
+				drawWorldPos(frustumIntersections[i], vec4(1, 0, 0, 1.0)); // Draw intersection points
+			}
+		}
 
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
@@ -271,8 +281,8 @@ void main()
 		int maxIt = 500;
 		int searchIt;
 		int maxItPerSearch = 32;
-		int invalidIntersectionSteps = 0;
-		int maxInvalidIntersectionSteps = 2;
+		int intersectionSteps = 0;
+		int maxIntersectionSteps = 2;
 
 		float floorStepSizeLT;
 		vec3 ftbStep = grassConsts.FtBDirection * stepSize;
@@ -299,7 +309,6 @@ void main()
 		float stepSizeLT;
 		float localStepSize;
 		float rand;
-		float alpha;
 		RandState rng;
 
 		int debugTest = 0;
@@ -314,11 +323,9 @@ void main()
 			searchIt = 0;
 			stepSize = getStepSize(distPointRay(lineOneStart, lineDirection, camera.CamPos), blend);
 			lO = lineOneStart;
-			// vec3 lOE = intersectFrustum(Ray(lineOneStart, lineDirection), frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
-			//stepSize = getStepSize(distPointLineSegment(lineOneStart, lOE, camera.CamPos), blend);
 
 			while(searching) {
-				alpha = 1.0;
+				maskedOut = false;
 
 				if(newLine || newGroup) {
 					// Calculate steps
@@ -326,42 +333,40 @@ void main()
 					horizontalStep = lineDirection * stepSize;
 
 					vec3 tempPos = lineOneStart;
-					vec3 intersectionStep = vec3(0);
-					invalidIntersectionSteps = 0;
+					intersectionSteps = 0;
 					do {
-						invalidIntersectionSteps++;
-
-						intersectionStep += ftbStep;
+						intersectionSteps++;
 
 						// Intersect with frustum to find next line
-						tempPos = lineOneStart + intersectionStep;
+						tempPos = lineOneStart + intersectionSteps * ftbStep ;
 						lT = intersectFrustum(Ray(tempPos, -lineDirection), frustumPlanesToCheckLineNegated, frustumPlaneNormals, frustumPoints);
-						
-						if(invalidIntersectionSteps > maxInvalidIntersectionSteps) {
+						//drawWorldPos(lT, vec4(0.2,0.0,1.0,1.0));
+						if(intersectionSteps > maxIntersectionSteps) {
 							break;
 						}
 					} while(any(isinf(lT))); // search for a valid intersection
-					lT = lT - (invalidIntersectionSteps - 1) * ftbStep;
-					// vec3 lTE = intersectFrustum(Ray(lT, lineDirection), frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
-					// stepSizeLT = getStepSize(distPointLineSegment(lT, lTE, camera.CamPos), blend);
+					lT = lT - (intersectionSteps - 1) * ftbStep; // only go forward one ftbStep
 					stepSizeLT = getStepSize(distPointRay(lT, lineDirection, camera.CamPos), blend);
-					lineTwoStart = floorGridPointByDir(lT, lineDirection, stepSizeLT);
+					lineTwoStart = floorToGridPointAlongRay(Ray(lT, lineDirection), stepSizeLT, lT); //floorGridPointByDir(lT, lineDirection, stepSizeLT); 
 					
-					
+					//drawWorldPos(lineTwoStart, vec4(0.0,1.0,1.0,1.0));
+
 					if(newLine) {
 						if(lessThanByDir(lT, lO, horizontalStep)) {
-							lineOneStart = floorGridPointByDir(lT - intersectionStep, lineDirection, stepSize);
+							lineOneStart = floorToGridPointAlongRay(Ray(lineOneStart, lineDirection), stepSize, lT - ftbStep); //floorGridPointByDir(lT - ftbStep, lineDirection, stepSize); 
 						} else if(lessThanByDir(lO, lT, horizontalStep)) {
-							lineTwoStart = floorGridPointByDir(lO + intersectionStep, lineDirection, stepSizeLT);
+							lineTwoStart = floorToGridPointAlongRay(Ray(lineTwoStart, lineDirection), stepSizeLT, lO + ftbStep); //floorGridPointByDir(lO + ftbStep, lineDirection, stepSizeLT); 
 						}
 					}
 					lineStart = lineOneStart; //floorGridPointByDir(lineOneStart, lineDirection, stepSize);
 					
-					
-					//drawTilePos(worldPosToTilePos(lineStart) + vec2(10, 0), vec4(1.0, 0.0, 1.0, 1.0));
+					// drawTilePos(worldPosToTilePos(lineStart) + vec2(10, 0), vec4(1.0, 0.0, 1.0, 1.0));
 
-					//drawWorldPos(lineOneStart, vec4(0.0,0.0,1.0,1.0));
-					//drawWorldPos(lineTwoStart, vec4(0.0,1.0,1.0,1.0));
+					
+					//if(grassConsts.DrawDebugInfo >= 1) drawWorldPos(lineOneStart, vec4(0.0,0.0,1.0,1.0));
+					//if(grassConsts.DrawDebugInfo >= 1) drawWorldPos(lineTwoStart, vec4(0.0,1.0,1.0,1.0));
+					
+					
 
 					newLine = false;
 					newGroup = false;
@@ -392,11 +397,11 @@ void main()
 					outOfFrustum = gridCellOutsideFrustum(currentPos, localStepSize, frustumPlanesToCheckLine, frustumPlaneNormals, frustumPoints);
 
 					
-					// drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
+					//if(grassConsts.DrawDebugInfo > 1) drawWorldPos(currentPos, vec4(outOfFrustum ? 1.0 : 0.0, outOfFrustum ? 0.0 : 1.0, 0.0, 1.0));
 					
 
 					// begin at MinDist
-					maskedOut = camDist < grassConsts.MinDist; // || camDist > grassConsts.MaxDist;
+					maskedOut = camDist < grassConsts.MinDist || camDist > grassConsts.MaxDist;
 					
 					// mask out cells if the stepSize used is too small for the cell
 					if(!maskedOut) {
@@ -433,7 +438,6 @@ void main()
 							localStepSize = nextStepSize;
 						} else {
 							maskedOut = makeBigger;
-							// alpha = (rand - blend) / (1 - blend); // Calculate an alpha value representing how close a cell is to being masked out
 						}
 						
 					}
@@ -443,7 +447,7 @@ void main()
 				}
 			
 				
-				if(prevThreadsInLine == 0 && ballotThreadNV(outOfFrustum) == ballotThreadNV(true) && lineNumber > 0) {
+				if(prevThreadsInLine == 0 && ballotThreadNV(outOfFrustum) == ballotThreadNV(true) && lineNumber >= maxIntersectionSteps) {
 					done = true;
 					break;
 				}
@@ -493,13 +497,15 @@ void main()
 			//}
 			//drawWorldPos(currentPos, vec4(1.0 - float(gl_LocalInvocationID.x) / 31, 0.0, float(gl_LocalInvocationID.x) / 31, 1.0));
 			// drawWorldPos(currentPos + vec3(rand_next(rng) * localStepSize, 0.0, rand_next(rng) * localStepSize) , vec4(1.0, 1.0, 1.0, 1.0));
-			//drawWorldPos(vec3(currentPos.x + localStepSize, 0, currentPos.z + localStepSize), vec4(0.9, 0.9, 0.8, 1.0));
-			// drawWorldPos(currentPos, vec4(alpha, alpha, alpha, 1));
+			// drawWorldPos(vec3(currentPos.x + localStepSize, 0, currentPos.z + localStepSize), vec4(0.9, 0.9, 0.8, 1.0));
+
+			//drawWorldPos(currentPos, vec4(1, 1, 1, 1));
+
 			drawGrassBlade(currentPos, localStepSize);
-			// vec4 c = vec4(0.0,0.1,0.2,1);
+			vec4 c = vec4(0.0,0.1,0.2,1);
 			//drawTilePos(worldPosToTilePos(vec3(currentPos.x + localStepSize, 0, currentPos.z + localStepSize)), c);
 			// drawTilePos(worldPosToTilePos(vec3(currentPos.x + 0.01 * stepSize, 0, currentPos.z + 0.01 * stepSize)), vec4(1,1,0,1));
-			// drawTilePos(worldPosToTilePos(vec3(currentPos.x, 0, currentPos.z)), c);
+			// drawTilePos(worldPosToTilePos(currentPos), c);
 			// drawTilePos(worldPosToTilePos(currentPos) + vec2(1, 0), c);
 			// drawTilePos(worldPosToTilePos(currentPos) + vec2(0, 1), c);
 			// drawTilePos(worldPosToTilePos(currentPos) + vec2(1, 1), c);
@@ -531,7 +537,7 @@ void main()
 	if(grassConsts.DrawDebugInfo >= 1.0) {
 		// debug - draw frustum intersections
 		for(int i = 0; i < frustumIntersectionCount; i++) {
-			drawWorldPos(frustumIntersections[i], vec4(0.0, 0.0, 0.0, 1.0)); // Draw intersection points
+			//drawWorldPos(frustumIntersections[i], vec4(0.0, 0.0, 0.0, 1.0)); // Draw intersection points
 		}
 	}
 }
@@ -842,6 +848,47 @@ bool lessThanByDir(vec3 fst, vec3 snd, vec3 dir) {
 	return result;
 }
 
+vec3 floorToGridPointAlongRay(Ray ray, float stepSize, vec3 pointOnRay) {
+	// find grid point on ray - intersect with next grid axis
+	if(!epsilonEq(ray.Dir.x, 0)) {
+		float xAxis = round(ray.Start.x / stepSize) * stepSize;
+		ray.Start = ray.Start + ((xAxis - ray.Start.x) / ray.Dir.x) * ray.Dir;
+		if(!epsilonEq(fract(ray.Start.z), 0)) {
+			ray.Start = floorGridPointByDir(ray.Start, -grassConsts.FtBDirection, stepSize);
+		}
+	} else {
+		float zAxis = round(ray.Start.z / stepSize) * stepSize;
+		ray.Start = ray.Start + ((zAxis - ray.Start.z) / ray.Dir.z) * ray.Dir;
+		if(!epsilonEq(fract(ray.Start.x), 0)) {
+			ray.Start = floorGridPointByDir(ray.Start, -grassConsts.FtBDirection, stepSize);
+		}
+	}
+
+	vec3 temp = pointOnRay - ray.Start;
+	float d = 0;
+	float t = 0;
+	if(ray.Dir.x != 0) {
+		t += temp.x / ray.Dir.x;
+		d++;
+	}
+	if(ray.Dir.y != 0) {
+		t += temp.y / ray.Dir.y;
+		d++;
+	}
+	if(ray.Dir.z != 0) {
+		t += temp.z / ray.Dir.z;
+		d++;
+	}
+
+	t /= d;
+
+	return ray.Start + floor(t / stepSize) * stepSize * ray.Dir;
+}
+
+vec3 floorGridPointByDirEpsilon(vec3 point, vec3 dir, vec3 sndDir, float stepSize) {
+	return floorGridPointByDir(point + Epsilon * sndDir, dir, stepSize);
+}
+
 vec3 floorGridPointByDir(vec3 point, vec3 dir, float stepSize) {
 	return floorGridPointByDirOffset(point, dir, stepSize, vec2(0,0));
 }
@@ -912,7 +959,7 @@ vec3 intersectFrustum(Ray ray, bool whichPlanes[6], vec3 frustumPlaneNormals[6],
 			inFrustum = true;
 			int dontCheck = i + ((i % 2 == 1) ? -1 : 1);// plane index opposite of current plane
 			for(int j = 0; j < 6; j++) {
-				if(j == i || !whichPlanes[j] || j == dontCheck) {
+				if(j == i || j == dontCheck) {
 					continue;
 				}
 

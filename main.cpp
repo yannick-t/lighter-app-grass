@@ -207,6 +207,8 @@ float csGrassWindSpeed = 1.5;
 int run() {
 	ogl::Platform platform(3, 3);
 	ogl::Window wnd(1280, 720, "Rise and Shine", nullptr);
+	// Fullscreen
+	// ogl::Window wnd(1920, 1080, "Rise and Shine");
 
 	// window & rendering set up
 	wnd.makeCurrent();
@@ -269,7 +271,7 @@ int run() {
 
 	// camera
 	Camera camera;
-	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.3f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
 
 	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
@@ -366,25 +368,25 @@ int run() {
 
 	float camSpeed = 1.0f;
 
-	std::string testString = "test str";
-
-	// test ui
 	auto&& tweakUi = [&](ui::UniversalInterface& ui) {
 		if (auto uiGroup = ui::Group(ui, nullptr)) {
-			ui.addText(nullptr, "Tweak", "", nullptr);
+			ui.addText(nullptr, "camera", "", nullptr);
 			ui.addSlider(&camSpeed, "cam speed", camSpeed, 10.0f, camSpeed, 2.0f);
+			ui.addText(nullptr, "grass settings", "", nullptr);
 			ui.addSlider(&csGrassMinHeight, "grass blade min height", csGrassMinHeight, 1.0f, csGrassMinHeight, 0.1f);
 			ui.addSlider(&csGrassMaxHeight, "grass blade max height", csGrassMaxHeight, 1.0f, csGrassMaxHeight, 0.1f);
-			ui.addSlider(&csGrassRelAODist, "AO", csGrassRelAODist, 1.0f, csGrassRelAODist, 0.1f);
 			ui.addSlider(&csGrassMinWidth, "grass blade min width", csGrassMinWidth, csGrassMaxHeight / 4, csGrassMinWidth, 0.1f);
 			ui.addSlider(&csGrassMaxWidth, "grass blade max width", csGrassMaxWidth, csGrassMaxHeight / 4, csGrassMaxWidth, 0.1f);
+			ui.addSlider(&csGrassRelAODist, "AO factor", csGrassRelAODist, 1.0f, csGrassRelAODist, 0.1f);
 			ui.addSlider(&csGrassStepPxAtMinDist, "grid size at minimal distance in pixels", csGrassStepPxAtMinDist, 100.0f, csGrassStepPxAtMinDist, 0.1f);
 			ui.addSlider(&csGrassMinDist, "distance to begin drawing grass", csGrassMinDist, 100.0f, csGrassMinDist, 0.1f);
 			ui.addSlider(&csGrassMaxDist, "distance to stop drawing grass", csGrassMaxDist, 1000.0f, csGrassMaxDist, 0.1f);
+			ui.addText(nullptr, "wind", "", nullptr);
 			ui.addSlider(&csGrassWindDirectionDegrees, "wind direction", csGrassWindDirectionDegrees, 359.0f, csGrassWindDirectionDegrees, 1.0f);
 			ui.addSlider(&csGrassWindSpeed, "wind speed", csGrassWindSpeed, 2.0f, csGrassWindSpeed, 1.0f);
+			ui.addText(nullptr, "debug", "", nullptr);
 			ui.addSlider(&drawDebugInfo, "level of debug info", drawDebugInfo, 10.0f, drawDebugInfo, 1.0f);
-			//			if (auto uiUnion = ui::Union(ui)) 
+
 			{
 				// ui.addButton(3, "test button", nullptr);
 				// ui.addInteractiveButton(4, "test button", true, nullptr);
@@ -584,11 +586,12 @@ int run() {
 			csGrassConstants.MinWidth = csGrassMinWidth;
 			csGrassConstants.MaxWidth = csGrassMaxWidth;
 			csGrassConstants.MinDist = csGrassMinDist;
+			csGrassConstants.MaxDist = csGrassMaxDist;
 			csGrassConstants.StepPxAtMinDist = csGrassStepPxAtMinDist;
 			csGrassConstants.TileDivisor = tileDivisor;
 			csGrassConstants.DrawDebugInfo = (int)drawDebugInfo;
 
-			csGrassConstants.TimeStamp = (float)thisTime;
+			csGrassConstants.TimeStamp = animTime;
 			csGrassWindDirection = glm::vec3(glm::rotate((float)(csGrassWindDirectionDegrees / 180 * M_PI), glm::vec3(0, 1, 0)) * glm::vec4(1, 0, 0, 1));
 			csGrassConstants.WindDirection = csGrassWindDirection;
 			csGrassConstants.WindSpeed = csGrassWindSpeed;
@@ -672,7 +675,7 @@ int run() {
 			// ui test
 			{
 				textUi.state.cursorVisible = halfSecond;
-				textUi.setup.rect.min = glm::ivec2(screenDim.x - 220, 300);
+				textUi.setup.rect.min = glm::ivec2(screenDim.x - 220, 150);
 				textUi.setup.rect.max = textUi.setup.rect.min + glm::ivec2(200, 500);
 
 				textUi.state.mouse.pos = mouse.lastMousePos;
