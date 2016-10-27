@@ -196,9 +196,15 @@ float csGrassRelAODist = 0.4;
 float csGrassMinWidth = 0.0001;
 float csGrassMaxWidth = 0.001;
 float csGrassMinDist = 3;
-float csGrassMaxDist = 30;
-float csGrassStepPxAtMinDist = 5;
+float csGrassMaxDist = 1000;
+//float csGrassStepPxAtMinDist = 5;
+float csGrassStepPxAtMinDist = 2.5;
 float drawDebugInfo = 0;
+int testNumber = 0;
+
+float grassTime;
+float totalGrassTime = 0;
+float averageGrassTimeCounter = 0;
 
 glm::vec3 csGrassWindDirection = glm::vec3(1, 0, 0);
 float csGrassWindDirectionDegrees = 0;
@@ -206,9 +212,12 @@ float csGrassWindSpeed = 1.5;
 
 int run() {
 	ogl::Platform platform(3, 3);
+	// Windowed
+	//ogl::Window wnd(1920, 1080, "Rise and Shine", nullptr);
 	ogl::Window wnd(1280, 720, "Rise and Shine", nullptr);
 	// Fullscreen
-	// ogl::Window wnd(1920, 1080, "Rise and Shine");
+	//ogl::Window wnd(1920, 1080, "Rise and Shine");
+	//ogl::Window wnd(1280, 720, "Rise and Shine");
 
 	// window & rendering set up
 	wnd.makeCurrent();
@@ -271,13 +280,22 @@ int run() {
 
 	// camera
 	Camera camera;
+	//camera.lookTo(glm::vec3(-0.6f, 0.8f, 0.0f) * 10.0f, glm::vec3(300, 0, 0), glm::vec3(0.0f, 1.0f, 0.0f));
 	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	// lower angle
+	// camera.lookTo(glm::vec3(-0.6f, 0.07f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	// camera.lookTo(glm::vec3(-0.6f, 0.01f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
 	auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
 
 	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
 	glm::vec4 lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	glm::vec4 ambientLightColor = glm::vec4(0.8, 0.8, 1.0, 1.0); // blue sky
+	glm::vec3 ambientLightDirection = glm::vec3(0.0, - 1, 0); 
 	auto lightConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::LightConstants));
 
+	// Ground
+	auto groundConstantsBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::GroundConstants));
 
 	// Grass Patch
 	auto csGrassConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CSGrassConstants));
@@ -361,9 +379,25 @@ int run() {
 		enableUi = !enableUi;
 	};
 
-	bool countGrassBlades = true;
+	bool countGrassBlades = false;
 	keyboard.keyEvent[GLFW_KEY_C].pressOnce = [&]() {
 		countGrassBlades = !countGrassBlades;
+	};
+
+	keyboard.keyEvent[GLFW_KEY_T].pressOnce = [&]() {
+		averageGrassTimeCounter = 0;
+		totalGrassTime = 0;
+		testNumber = (testNumber + 1) % 7;
+	};
+
+	int useSharedMemory = 1;
+	keyboard.keyEvent[GLFW_KEY_X].pressOnce = [&]() {
+		useSharedMemory = (useSharedMemory + 1) % 3;
+	};
+
+	keyboard.keyEvent[GLFW_KEY_N].pressOnce = [&]() {
+		averageGrassTimeCounter = 0;
+		totalGrassTime = 0;
 	};
 
 	float camSpeed = 1.0f;
@@ -515,6 +549,8 @@ int run() {
 		glsl::LightConstants lightConst; {
 			lightConst.Direction = lightDirection;
 			lightConst.Color = lightColor;
+			lightConst.AmbientColor = ambientLightColor;
+			lightConst.AmbientDirection = ambientLightDirection;
 			lightConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&lightConst, 1));
 		}
 
@@ -536,6 +572,12 @@ int run() {
 		}
 
 		
+		glsl::GroundConstants groundConst; {
+			groundConst.MinDist = csGrassMinDist;
+			groundConst.MaxDist = csGrassMaxDist;
+			groundConstantsBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&groundConst, 1));
+		}
+
 		// Ground
 		{
 			hdrBuffer.bind(GL_FRAMEBUFFER);
@@ -543,6 +585,7 @@ int run() {
 			glEnable(GL_DEPTH_TEST);
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
 			lightConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
+			groundConstantsBuffer.bind(GL_UNIFORM_BUFFER, 2);
 			nullVertexArrays.bind();
 			groundShader.bind();
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -595,6 +638,9 @@ int run() {
 			csGrassWindDirection = glm::vec3(glm::rotate((float)(csGrassWindDirectionDegrees / 180 * M_PI), glm::vec3(0, 1, 0)) * glm::vec4(1, 0, 0, 1));
 			csGrassConstants.WindDirection = csGrassWindDirection;
 			csGrassConstants.WindSpeed = csGrassWindSpeed;
+
+			csGrassConstants.TestNumber = testNumber;
+			csGrassConstants.UseSharedMemory = useSharedMemory;
 			csGrassConstBuffer.write(GL_UNIFORM_BUFFER, stdx::make_range_n(&csGrassConstants, 1));
 
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 1);
@@ -607,6 +653,7 @@ int run() {
 
 			// Draw result
 			glEnable(GL_BLEND);
+			glDisable(GL_DEPTH_TEST);
 			glBlendEquation(GL_FUNC_ADD);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			hdrBuffer.bind(GL_FRAMEBUFFER);
@@ -623,6 +670,10 @@ int run() {
 		}
 
 		grassEnd.record();
+
+		grassTime = ogl::diffMS(grassStart, grassEnd);
+		averageGrassTimeCounter++;
+		totalGrassTime += grassTime;
 		
 		if (countGrassBlades && frameIdx % 15 == 0) {
 			// get counter
@@ -691,7 +742,9 @@ int run() {
 				glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
 				ui.addSlider(&dt, "dt (ms)", dt * 1000.0f, 500.0f, nullptr);
-				ui.addSlider(&dt, "grass (ms)", ogl::diffMS(grassStart, grassEnd), dt * 1000.0f, nullptr);
+				ui.addSlider(&dt, "grass (ms)", grassTime, dt * 1000.0f, nullptr);
+				ui.addSlider(&dt, "average grass (ms)", (totalGrassTime / averageGrassTimeCounter), 500.0f, nullptr);
+				std::cout << "average grass (ms): " << (totalGrassTime / averageGrassTimeCounter) << std::endl;
 
 				char fpsString[20];
 				_snprintf(fpsString, 20, "%f FPS", fps);

@@ -28,7 +28,10 @@ struct CameraConstants
 struct LightConstants
 {
 	vec3 Direction;
+	CLSL_RENDERER_VEC3_PADDING(float _pad3;)
 	vec4 Color;
+	vec3 AmbientDirection;
+	vec4 AmbientColor;
 };
 
 
@@ -54,10 +57,19 @@ struct CSGrassConstants
 	float WindSpeed;
 
 	float TimeStamp;
+	int TestNumber;
+	int UseSharedMemory;
 };
 
 struct Ray
 {
 	vec3 Start;
 	vec3 Dir;
+};
+
+
+struct GroundConstants 
+{
+	float MinDist;
+	float MaxDist;
 };

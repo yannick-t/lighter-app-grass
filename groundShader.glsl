@@ -14,6 +14,11 @@ layout(std140, binding = 1) uniform Light
 	LightConstants light;
 };
 
+layout(std140, binding = 2) uniform Ground
+{
+	GroundConstants ground;
+};
+
 
 #ifdef VERTEX_OUT
 out VertexData
@@ -132,6 +137,15 @@ void main()
 	vec3 normal = vin.worldNormal;
 	float factor = max(-dot(light.Direction, normal), 0.1);
 	color0 = 0.4 * factor * vec4(0.2, 0.05, 0, 1);
+
+	float dist = distance(vin.worldPos, camera.CamPos);
+
+
+	float f1 = clamp((dist - ground.MinDist - 0.1) / 0.1, 0, 1);
+	float f2 = clamp((ground.MaxDist - dist - 0.1) / 0.1, 0, 1);
+
+	color0 = mix(color0, color0 * 0.4, min(f1, f2));
+	
 }
 
 #endif
