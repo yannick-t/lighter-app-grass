@@ -54,7 +54,7 @@ void main()
 	float patchSizeZ = grassPatch.Size;
 
 	// Grass blade
-	float minHeight = 0.2;
+	float minHeight = 0.06;
 	float maxHeight = grassPatch.MaxHeight;
 
 	// 1.0 = full 360 degree rotation possible
@@ -63,14 +63,14 @@ void main()
 	float rotLimitFactorZ = 0.01;
 
 	// For now only X, Y
-	float maxInfluencePointVariationX = 0.5;
-	float maxInfluencePointVariationY = 0.1;
+	float maxInfluencePointVariationX = 0.1;
+	float maxInfluencePointVariationY = 0.01;
 
 	// Top of the blade X variation
-	float maxPointVariationX = 0.5;
+	float maxPointVariationX = 0.1;
 
-	float maxBaseWidth = 0.1;
-	float minBaseWidth = 0.01;
+	float maxBaseWidth = 0.01;
+	float minBaseWidth = 0.001;
 	float maxBaseWidthDeviationFactor = 1;
 
 

@@ -279,7 +279,7 @@ namespace main_ex {
 }
 
 float baseGrassPatchSize = 200;
-float grassPatchMaxHeight = 1.5;
+float grassPatchMaxHeight = 0.16;
 float baseGrassDensity = 0.1; // number of grass blades per unit for largest grass patches
 float maxPatchDistanceToSubdivide = 10;
 float maxPatchSubdivRecursion = 3;
@@ -348,7 +348,7 @@ void addAndSubdivide(float x, float z, float size, float density, Camera camera,
 
 int run() {
 	ogl::Platform platform(3, 3);
-	ogl::Window wnd(1024, 576, "Rise and Shine", nullptr);
+	ogl::Window wnd(1280, 720, "Rise and Shine", nullptr);
 
 	// window & rendering set up
 	wnd.makeCurrent();
@@ -420,7 +420,7 @@ int run() {
 
 	// camera
 	Camera camera;
-	camera.lookTo(glm::vec3(-1.0f, 0.0f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
 
 	glm::vec3 lightDirection = normalize(glm::vec3(1.0f, -4.0f, -3.0f));
@@ -428,7 +428,6 @@ int run() {
 	auto lightConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::LightConstants));
 
 	// Grass Patch
-	// Todo: more sliders
 	auto grassPatchConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::GrassPatchConstants));
 	std::vector<GrassPatch> patches;
 
@@ -538,6 +537,7 @@ int run() {
 	int bladeCount = 0;
 	int patchCount = 0;
 
+	ogl::Event grassStart = ogl::Event::create(), grassEnd = ogl::Event::create();
 	while (!wnd.shouldClose()) {
 		glfwPollEvents();
 
@@ -642,6 +642,7 @@ int run() {
 			glDrawArrays(GL_TRIANGLES, 0, 3);
 		}
 
+		grassStart.record();
 		// Reference Geometry Grass
 		{
 
@@ -754,6 +755,7 @@ int run() {
 				camera.computeFootprintNDCQuad(ndcPs);
 			}
 		}
+		grassEnd.record();
 
 		// Blit / tonemap
 		{
@@ -813,6 +815,7 @@ int run() {
 				glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
 				ui.addSlider(&dt, "dt (ms)", dt * 1000.0f, 500.0f, nullptr);
+				ui.addSlider(&dt, "grass (ms)", ogl::diffMS(grassStart, grassEnd), dt * 1000.0f, nullptr);
 
 				char fpsString[20];
 				_snprintf(fpsString, 20, "%f FPS", fps);
