@@ -170,7 +170,7 @@ void main()
 	draw = draw && frustumIntersectionCount > 3;
 	
 	
-	if(draw && (gl_WorkGroupID.x == 6 && gl_WorkGroupID.y == 15 /*|| gl_WorkGroupID.x == 17 && gl_WorkGroupID.y == 20*/ || grassConsts.DrawDebugInfo < 1)) {
+	if(draw/* && (gl_WorkGroupID.x == 6 && gl_WorkGroupID.y == 15 || gl_WorkGroupID.x == 17 && gl_WorkGroupID.y == 20 || grassConsts.DrawDebugInfo < 1)*/) {
 
 		
 		
@@ -508,7 +508,7 @@ void main()
 			if(grassConsts.TestNumber > 1) {
 				drawGrassBlade(currentPos, localStepSize);
 			} else {
-				vec4 c = 4 * vec4(0.0,0.1,0.2,1);
+				vec4 c = 2 * vec4(0.0,0.1,0.2,1);
 				drawTilePos(worldPosToTilePos(currentPos), c); 
 			}
 

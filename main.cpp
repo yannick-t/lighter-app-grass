@@ -195,10 +195,11 @@ float csGrassMaxHeight = 0.16;
 float csGrassRelAODist = 0.4;
 float csGrassMinWidth = 0.0001;
 float csGrassMaxWidth = 0.001;
-float csGrassMinDist = 3;
+float csGrassMinDist = 1;
 float csGrassMaxDist = 1000;
 //float csGrassStepPxAtMinDist = 5;
-float csGrassStepPxAtMinDist = 2.5;
+//float csGrassStepPxAtMinDist = 2.5;
+float csGrassStepPxAtMinDist = 3.7;
 float drawDebugInfo = 0;
 int testNumber = 0;
 
@@ -208,16 +209,19 @@ float averageGrassTimeCounter = 0;
 
 glm::vec3 csGrassWindDirection = glm::vec3(1, 0, 0);
 float csGrassWindDirectionDegrees = 0;
-float csGrassWindSpeed = 1.5;
+float csGrassWindSpeed = 2.5;
 
 int run() {
 	ogl::Platform platform(3, 3);
 	// Windowed
 	//ogl::Window wnd(1920, 1080, "Rise and Shine", nullptr);
-	ogl::Window wnd(1280, 720, "Rise and Shine", nullptr);
+	//ogl::Window wnd(1280, 720, "Rise and Shine", nullptr);
 	// Fullscreen
-	//ogl::Window wnd(1920, 1080, "Rise and Shine");
+	ogl::Window wnd(1920, 1080, "Rise and Shine");
 	//ogl::Window wnd(1280, 720, "Rise and Shine");
+
+	// hide mouse
+	// glfwSetInputMode(wnd, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 
 	// window & rendering set up
 	wnd.makeCurrent();
