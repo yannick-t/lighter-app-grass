@@ -125,7 +125,7 @@ void main()
 	// initialize pixel array
 	if(grassConsts.UseSharedMemory == 1) {
 		for(int i = 0; i < 32; i++) {
-			pixels[gl_LocalInvocationID.x][i] = vec4(0.0);
+			pixels[i][gl_LocalInvocationID.x] = vec4(0.0);
 		}
 	}
 
@@ -533,7 +533,7 @@ void main()
 			// Copy workgroup result to framebuffer
 		if(grassConsts.UseSharedMemory == 1) {
 			for(int i = 0; i < 32; i++) {
-				imageStore(result, tileCorner + ivec2(gl_LocalInvocationID.x, i), pixels[gl_LocalInvocationID.x][i]);	
+				imageStore(result, tileCorner + ivec2(gl_LocalInvocationID.x, i), pixels[i][gl_LocalInvocationID.x]);	
 			}
 		}
 
@@ -691,10 +691,10 @@ bool drawGrassBladePixel(float y, float t) {
 	// draw
 	int ix;
 	int iy = int(y);
-	int xStart = int(max(x, 0));
+	int xStart = int(max(x, 0) + 0.5);
 	float widthScaling = 1 - ((t - (1 - tipLengthT)) / tipLengthT);
 	float fxEnd = widthScaling > 1 ? x + widthPx : x + widthScaling * widthPx; 
-	int xEnd = int(min(fxEnd, 31));
+	int xEnd = int(min(fxEnd, 31) - 0.5);
 
 	bool continueDrawing = false;
 	for(ix = xStart; ix <= xEnd; ix++) {
@@ -702,43 +702,41 @@ bool drawGrassBladePixel(float y, float t) {
 	}
 
 	// Antialiasing - in +x and -x because of the width scaling it can be different
-	float b = modf(x, x);
+	float b = fract(x + 0.5);
 	int aaPixel = xStart - 1;
-	if(b < 0.5) {
-		b = abs((b - 0.5) * 2);
 
-		color.a = b;
-		if(aaPixel >= 0 && aaPixel <= 31) {
-			continueDrawing = drawGrassBladePixelBlend(aaPixel, iy, color) || continueDrawing;
-		}
+	b = 1 - b;
+
+	color.a = b;
+	if(aaPixel >= 0 && aaPixel <= 31) {
+		continueDrawing = drawGrassBladePixelBlend(aaPixel, iy, color) || continueDrawing;
 	}
-	b = modf(fxEnd, x);
+	
+	b = fract(fxEnd + 0.5);
 	aaPixel = ix;
-	if(b > 0.5) {
-		b = abs((b - 0.5) * 2);
 		
-		color.a = b;
-		if(aaPixel >= 0 && aaPixel <= 31) {
-			continueDrawing = drawGrassBladePixelBlend(aaPixel, iy, color) || continueDrawing;
-		}
+	color.a = b;
+	if(aaPixel >= 0 && aaPixel <= 31) {
+		continueDrawing = drawGrassBladePixelBlend(aaPixel, iy, color) || continueDrawing;
 	}
+	
 
 	return continueDrawing;
 }
 
 bool drawGrassBladePixelBlend(int x, int y, vec4 color) {
 	//imageStore(result, tileCorner + ivec2(x,y), color);
-	//pixels[x][y] = color;
+	//pixels[y][x] = color;
 	//return true;
 
-	float srcAlpha = pixels[x][y].a;
+	float srcAlpha = pixels[y][x].a;
 	if(srcAlpha < 1.0) {
-		pixels[x][y].a = srcAlpha + color.a * (1 - srcAlpha);
-		pixels[x][y].rgb = (srcAlpha * pixels[x][y].rgb + (1 - srcAlpha) * color.a * color.rgb) / pixels[x][y].a;
+		pixels[y][x].a = srcAlpha + color.a * (1 - srcAlpha);
+		pixels[y][x].rgb = ((1 - color.a) * pixels[y][x].rgb + color.a *  color.rgb);
 		if(grassConsts.UseSharedMemory == 0) {
 			drawTilePosDirect(vec2(x,y), color);
 		}
-		//pixels[x][y] = color;
+		//pixels[y][x] = color;
 		return true;
 	} else {
 		return false;
@@ -1074,7 +1072,7 @@ void drawTilePos(vec2 pos, vec4 color) {
 		drawTilePosDirect(pos, color);
 	} else {
 		if(pos.x >= 0 && pos.x < 32 && pos.y >= 0 && pos.y < 32) {
-			pixels[int(pos.x)][int(pos.y)] = color;
+			pixels[int(pos.y)][int(pos.x)] = color;
 		}
 	}
 }
