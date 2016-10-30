@@ -6,6 +6,8 @@ The developed program produces a good approximation for medium to far distance g
 
 The thesis can be found [here](./thesis.pdf) (German)
 
+A video showcasing the implementation cann be found at (https://vimeo.com/189309577)
+
 ![screenshot of the implementation](./cs_grass_result_screenshot_1.png)
 
 The program is based upon https://github.com/tszirr/lighter-app/tree/f7cec6d0a04f8d92d007136ca0f1e280eddafc7f
