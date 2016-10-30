@@ -51,7 +51,7 @@ struct CSGrassConstants
 	float MinDist;
 	float MaxDist;
 	float StepPxAtMinDist;
-	int DrawDebugInfo; // levels of debug info
+	int DrawDebugInfo;
 
 	vec3 WindDirection;
 	float WindSpeed;

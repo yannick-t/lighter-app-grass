@@ -33,9 +33,15 @@ namespace glsl {
 // Movement: W,A,S,D,Space,Q + Mouse
 // |- Faster: Left Shift
 // |- Slower: Left Ctrl
-// Light:
+// Animation:
 // |- Toogle slow / fast mode: F
 // |- Pause / reanimate: P
+// Other shortcuts:
+// |- Toggle GUI: U
+// |- Toggle counting grass blades: C
+// |- Switch through test cases: T
+// |- Change render mode: X
+// |- Reset average time: N (T also resets this)
 // Escape: ESC
 
 bool const stdx::is_debugger_present = IsDebuggerPresent() != FALSE;
@@ -103,9 +109,6 @@ struct Camera {
 		regGridDirection = regGridDirectionFromOctant(octant);
 		perpRegGridDirection = regGridDirectionFromOctant(perpOctant);
 		regGridDirDiagonal = octant % 2 == 1;
-
-		// std::cout << regGridDirection << std::endl;
-		// std::cout << (roundf(8 * angle / (2 * M_PI) + 8)) << std::endl;
 
 		calcViewProj();
 	}
@@ -195,11 +198,12 @@ float csGrassMaxHeight = 0.16;
 float csGrassRelAODist = 0.4;
 float csGrassMinWidth = 0.0001;
 float csGrassMaxWidth = 0.001;
-float csGrassMinDist = 1;
+float csGrassMinDist = 3;
 float csGrassMaxDist = 1000;
-//float csGrassStepPxAtMinDist = 5;
+float csGrassStepPxAtMinDist = 5;
+// different test cases
 //float csGrassStepPxAtMinDist = 2.5;
-float csGrassStepPxAtMinDist = 3.7;
+//float csGrassStepPxAtMinDist = 3.7;
 float drawDebugInfo = 0;
 int testNumber = 0;
 
@@ -215,12 +219,12 @@ int run() {
 	ogl::Platform platform(3, 3);
 	// Windowed
 	//ogl::Window wnd(1920, 1080, "Rise and Shine", nullptr);
-	//ogl::Window wnd(1280, 720, "Rise and Shine", nullptr);
-	// Fullscreen
-	ogl::Window wnd(1920, 1080, "Rise and Shine");
+	ogl::Window wnd(1280, 720, "Rise and Shine", nullptr);
+	// Uncomment for Fullscreen
+	//ogl::Window wnd(1920, 1080, "Rise and Shine");
 	//ogl::Window wnd(1280, 720, "Rise and Shine");
 
-	// hide mouse
+	// uncomment to hide mouse
 	// glfwSetInputMode(wnd, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 
 	// window & rendering set up
@@ -282,13 +286,14 @@ int run() {
 		shaderBinFile.write(shaderBin.data(), shaderBin.size());
 	}
 
-	// camera
+	// camera 
+	// different test cases
 	Camera camera;
 	//camera.lookTo(glm::vec3(-0.6f, 0.8f, 0.0f) * 10.0f, glm::vec3(300, 0, 0), glm::vec3(0.0f, 1.0f, 0.0f));
 	camera.lookTo(glm::vec3(-0.6f, 0.14f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	// lower angle
-	// camera.lookTo(glm::vec3(-0.6f, 0.07f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	// camera.lookTo(glm::vec3(-0.6f, 0.01f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	//camera.lookTo(glm::vec3(-0.6f, 0.07f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	//camera.lookTo(glm::vec3(-0.6f, 0.01f, 0.0f) * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
 	auto camConstBuffer = ogl::Buffer::create(GL_UNIFORM_BUFFER, sizeof(glsl::CameraConstants));
 
@@ -322,13 +327,6 @@ int run() {
 	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, atomicsBuffer);
 	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), NULL, GL_DYNAMIC_DRAW);
 	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
-
-	/*
-	float stepDistFactor = (glm::length(camera.nearPoints[0] - camera.nearPoints[1]) / glm::length(camera.farPoints[0] - camera.farPoints[1]) - 1) / (camera.farPlane - camera.nearPlane);
-	// calc dist for horizontal length at normal dist to need to double to be the same length on the screen
-	float stepNormalDist = 2;
-	float stepDoubleDist = abs((2 * stepNormalDist + 1 / stepDistFactor) - stepNormalDist);*/
-	
 
 	// load environment map
 	ogl::Texture envMap = nullptr; {
@@ -597,7 +595,6 @@ int run() {
 
 
 		// Compute Shader Grass
-		// auto csResult = renderTargetPool.acquire(ogl::TextureDesc::make2D(GL_TEXTURE_2D, GL_RGBA32F, screenDim.x, screenDim.y));
 		// result texture
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, csResult);
@@ -661,8 +658,6 @@ int run() {
 			glBlendEquation(GL_FUNC_ADD);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			hdrBuffer.bind(GL_FRAMEBUFFER);
-			//glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 			glDisable(GL_DEPTH_TEST);
 			camConstBuffer.bind(GL_UNIFORM_BUFFER, 0);
@@ -759,7 +754,6 @@ int run() {
 				ui.addText(nullptr, bladeCountString, "", nullptr);
 
 				tweakUi(ui);
-				// ui::preset_user_interface(ui, tweakUi, defaultIniFile);
 
 				textUi.flushWidgets();
 
@@ -797,7 +791,6 @@ int run() {
 
 		if (frameIdx % 15 == 0) {
 			fps = 1.0f / smoothFDt;
-			// std::cout << "Frame time: " << 1000.0f * smoothFDt << " ms; " << 1.0f / smoothFDt << " FPS" << std::endl;
 		}
 
 		// Sleep(12);
