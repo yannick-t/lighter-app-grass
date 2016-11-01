@@ -187,7 +187,9 @@ void main()
 			maxFrustumNDC = max(ndcMIntersecion.xy, maxFrustumNDC);
 		}
 
-		// Here the frustum could be eypanded to the left and right to allow grass blades to reach into it
+		// Here the frustum could be expanded more to the left and right to allow grass blades to reach into it
+		minFrustumNDC.x -= initialStepSizeNDC;
+		maxFrustumNDC.x += initialStepSizeNDC;
 
 		// Expand frustum with the min / max values (essentially an AABB)
 		for(int i = 0; i < 8; i+= 4) {
@@ -623,6 +625,7 @@ void scanlineRasterizeGrassBlade() {
 			}
 		}
 
+		// Stop drawing a grass blade if there are others blocking it
 		if(!cont) break;
 	}
 }
@@ -689,7 +692,7 @@ bool drawGrassBladePixelBlend(int x, int y, vec4 color) {
 	float destAlpha = pixels[y][x].a;
 	if(destAlpha < 1.0) {
 		pixels[y][x].a = destAlpha + color.a * (1 - destAlpha);
-		pixels[y][x].rgb = ((1 - color.a) * pixels[y][x].rgb + color.a *  color.rgb);
+		pixels[y][x].rgb = (destAlpha * pixels[y][x].rgb + (1 - destAlpha) *  color.rgb);
 		if(grassConsts.UseSharedMemory == 0) {
 			drawTilePosDirect(vec2(x,y), color);
 		}
