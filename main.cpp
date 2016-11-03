@@ -198,9 +198,9 @@ float csGrassMaxHeight = 0.16;
 float csGrassRelAODist = 0.4;
 float csGrassMinWidth = 0.0001;
 float csGrassMaxWidth = 0.001;
-float csGrassMinDist = 3;
-float csGrassMaxDist = 30;
-float csGrassStepPxAtMinDist = 2.5;
+float csGrassMinDist = 1;
+float csGrassMaxDist = 1000;
+float csGrassStepPxAtMinDist = 5;
 // different test cases
 //float csGrassStepPxAtMinDist = 2.5;
 //float csGrassStepPxAtMinDist = 3.7;

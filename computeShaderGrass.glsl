@@ -208,7 +208,12 @@ void main()
 		frustumIntersections = calcFrustumIntersections(planePoint, planeNormal, frustumIntersectionCount);
 		frustumPlaneNormals = calcFrustumNormals();
 
-
+		if(grassConsts.DrawDebugInfo >= 1.0) {
+			// debug - draw frustum intersections
+			for(int i = 0; i < frustumIntersectionCount; i++) {
+				drawWorldPos(frustumIntersections[i], vec4(1, 0, 0, 1.0)); // Draw intersection points
+			}
+		}
 
 		// Find line of cells to start with -> vector perpendicular to ftb vector at the start vector roughly pointing away from the camera (for front to back iteration later)
 		vec3 lineDirection = grassConsts.PerpFtBDir;
